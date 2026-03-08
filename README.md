@@ -69,8 +69,14 @@ agent_loop.py                    biologics_server.py
   logs/agent_cot.log
 ```
 
-- `biologics_server.py` — FastMCP server, three deterministic tools, structured JSON output.
+- `biologics_server.py` — FastMCP server, four deterministic tools, structured JSON output.
 - `agent_loop.py` — Falsification loop via OpenAI-compatible API. Per-iteration cost tracking. Green CoT terminal output, logged to `logs/agent_cot.log`.
+
+### Developability Dashboard
+
+![Developability Optimization Dashboard](assets/biophysical_trajectory.png)
+
+The dashboard is generated automatically at the end of each run, tracking all four developability metrics across iterations.
 
 ## Quickstart
 
