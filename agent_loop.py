@@ -573,7 +573,7 @@ def run_falsification_loop() -> None:
                 "Design a VHH nanobody targeting Human PD-1 at the "
                 "Pembrolizumab epitope. Follow the sequential falsification "
                 "protocol exactly. Begin by proposing your first candidate "
-                "sequence, then immediately falsify it with all three tools."
+                "sequence, then immediately falsify it with all four tools."
             ),
         },
     ]
@@ -676,6 +676,37 @@ def run_falsification_loop() -> None:
                     "content": result_str,
                 }
             )
+
+        # --- Auto-profile: guarantee complete metrics every iteration ---
+        # Extract the last sequence the model submitted to any tool
+        last_seq = None
+        for tool_call in reversed(message.tool_calls):
+            args = json.loads(tool_call.function.arguments)
+            if "sequence" in args:
+                last_seq = args["sequence"]
+                break
+
+        if last_seq:
+            if iteration not in iteration_metrics:
+                iteration_metrics[iteration] = {"iteration": iteration}
+            m = iteration_metrics[iteration]
+
+            # Fill any metrics the model didn't call this iteration
+            if "pI" not in m or "gravy" not in m:
+                bp = json.loads(calculate_biophysical_profile(last_seq))
+                if "error" not in bp:
+                    m.setdefault("pI", bp["isoelectric_point"])
+                    m.setdefault("gravy", bp["gravy"])
+
+            if "liability_count" not in m:
+                sl = json.loads(scan_structural_liabilities(last_seq))
+                if "error" not in sl:
+                    m["liability_count"] = sl["liability_count"]
+
+            if "apr_percentile" not in m:
+                ap = json.loads(scan_aggregation_patches(last_seq))
+                if "error" not in ap:
+                    m["apr_percentile"] = ap["candidate_max_patch"]["percentile"]
 
     else:
         warn_print(
