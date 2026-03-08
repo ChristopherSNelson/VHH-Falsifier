@@ -271,10 +271,17 @@ You are acting as a Senior Computational Biologics Engineer at an agentic drug d
 - Biophysics: pI > 7.5 and GRAVY ≤ 0.0 are hard requirements.
 
 #### Implemented Components
-- `biologics_server.py` — FastMCP server with three deterministic tools: `calculate_biophysical_profile`, `scan_structural_liabilities`, `vhh_hallmark_audit`. All return structured JSON.
-- `agent_loop.py` — Sequential falsification loop using Together AI (DeepSeek V3) via OpenAI-compatible API. Includes per-iteration cost tracking. CoT logged to `logs/agent_cot.log`.
+- `biologics_server.py` — FastMCP server with four deterministic tools: `calculate_biophysical_profile`, `scan_structural_liabilities`, `vhh_hallmark_audit`, `scan_aggregation_patches`. All return structured JSON.
+- `scan_aggregation_patches` — Clinically-calibrated APR scanner. 7-residue sliding window over Kyte-Doolittle, scored as z-scores/percentiles against a reference distribution of 13 clinical-stage VH/VHH domains. Falsification threshold: 95th percentile (1.934 mean KD/residue). Gold standard: Caplacizumab (max patch = 1.357, 40.5th percentile).
+- `agent_loop.py` — Sequential falsification loop using Together AI (DeepSeek V3) via OpenAI-compatible API. Includes per-iteration cost tracking, biophysical trajectory plot (auto-opens on macOS). CoT logged to `logs/agent_cot.log`.
 - API provider: Together AI (US-hosted, `api.together.xyz`). Default model: `deepseek-ai/DeepSeek-V3`. Configurable via `MODEL_ID` env var.
 - API key: `TOGETHER_API_KEY` env var (set in `~/.zshrc`, never committed).
+
+#### SOTA Tool Preferences (for roadmap implementation)
+- Structure prediction: Boltz-2 (not ESMFold or AlphaFold-Multimer). Best open-source accuracy for antibody-antigen complexes, MIT license.
+- Antibody inverse folding: AntiFold (not ProteinMPNN). Purpose-built for antibody CDR sequence recovery.
+- Humanness / immunogenicity scoring: AbLang2 or AntiBERTa2 (not ESM-2). Trained on antibody repertoires, perplexity reflects actual immunogenicity risk.
+- MHC presentation prediction: BigMHC or PRIME 2.0. Mass-spec ground truth over binding-affinity-only models like NetMHCpan.
 
 #### Coding Standard
 1. Tool-first design: Every tool returns structured JSON that a downstream LLM can reason over.

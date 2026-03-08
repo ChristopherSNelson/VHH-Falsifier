@@ -119,19 +119,19 @@ VHH-Falsifier is a functional prototype of agentic sequential falsification. Fut
 
 SASA-aware liabilities: Integrate BioPython PDB or FreeSASA to context-qualify PTM motifs (e.g., NG deamidation). A liability is only falsified if its solvent accessible surface area exceeds 25 A^2, preventing the rejection of stable, buried residues.
 
-Interface delta-G via folding: Invoke ESMFold or AlphaFold-Multimer to calculate binding energy and interface RMSD, moving beyond zero-shot sequence guessing to structural validation of CDR3 loop geometry.
+Interface delta-G via folding: Invoke Boltz-2 to predict VHH-antigen complex structures and calculate binding energy and interface RMSD, moving beyond zero-shot sequence guessing to structural validation of CDR3 loop geometry. Boltz-2 outperforms AlphaFold-Multimer on antibody-antigen docking and supports protein, nucleic acid, and small molecule inputs under an MIT license.
 
 ### 2. High-Fidelity Developability (TDC Alignment)
 
 Spatially-resolved aggregation: Upgrade from global GRAVY scores to Spatial Aggregation Propensity (SAP) mapping. This identifies local hydrophobic patches specifically on the solvent-exposed surface of the VHH, aligning with Therapeutics Data Commons (TDC) benchmarks like TAP.
 
-Inverse folding: Replace stochastic mutation with a ProteinMPNN or IgDesign layer to generate sequence manifolds pre-optimized for the target scaffold's 3D coordinates.
+Inverse folding: Replace stochastic mutation with an AntiFold layer to generate sequence manifolds pre-optimized for the target scaffold's 3D coordinates. AntiFold is purpose-built for antibody inverse folding with better CDR sequence recovery than general-purpose tools like ProteinMPNN.
 
 ### 3. Next-Gen Immunogenicity Falsification
 
 Presentation-aware screening: Move beyond legacy NetMHCpan to BigMHC, a deep learning ensemble that predicts peptide presentation on the cell surface (mass spec ground truth) rather than just binding affinity.
 
-OAS-perplexity scoring: Use ESM-2 to calculate the naturalness (log-likelihood) of the VHH sequence relative to the Observed Antibody Space (OAS). Any design with high perplexity (statistical deviation from human germline distributions) is falsified as a high immunogenicity risk.
+OAS-perplexity scoring: Use AbLang2 or AntiBERTa2 to calculate the naturalness (log-likelihood) of the VHH sequence relative to the Observed Antibody Space (OAS). These antibody-specific language models provide perplexity scores that reflect actual immunogenicity risk, unlike general protein models (ESM-2) that lack repertoire-level calibration. Any design with high perplexity (statistical deviation from human germline distributions) is falsified as a high immunogenicity risk.
 
 ### 4. Complex Search and Optimization
 
