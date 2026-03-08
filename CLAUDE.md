@@ -274,7 +274,7 @@ You are acting as a Senior Computational Biologics Engineer at an agentic drug d
 #### Implemented Components
 - `biologics_server.py` — FastMCP server with four deterministic tools: `calculate_biophysical_profile`, `scan_structural_liabilities`, `vhh_hallmark_audit`, `scan_aggregation_patches`. All return structured JSON.
 - `scan_aggregation_patches` — Clinically-calibrated APR scanner. 7-residue sliding window over Kyte-Doolittle, scored as z-scores/percentiles against a reference distribution of 13 clinical-stage VH/VHH domains. Falsification threshold: 95th percentile (1.934 mean KD/residue). Gold standard: Caplacizumab (max patch = 1.357, 40.5th percentile).
-- `agent_loop.py` — Sequential falsification loop using Together AI (DeepSeek V3) via OpenAI-compatible API. Includes per-iteration cost tracking, 4-panel developability dashboard (pI, GRAVY, liability count, APR percentile; auto-opens on macOS). CoT logged to `logs/agent_cot.log`.
+- `agent_loop.py` — Sequential falsification loop using Together AI (DeepSeek V3) via OpenAI-compatible API. Includes per-iteration cost tracking, 4-panel developability dashboard (pI, GRAVY, liability count, APR percentile; auto-opens on macOS). CoT logged to `logs/agent_cot.log`. Features: auto-profiling (runs missing tools after each iteration for complete metrics), carry-forward + back-fill for missing data points, seed sequences (`--seed naive|pembrolizumab|none`, default: naive).
 - API provider: Together AI (US-hosted, `api.together.xyz`). Default model: `deepseek-ai/DeepSeek-V3`. Configurable via `MODEL_ID` env var.
 - API key: `TOGETHER_API_KEY` env var (set in `~/.zshrc`, never committed).
 

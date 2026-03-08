@@ -43,7 +43,7 @@ Deterministic regex — no LLM inference, no stochastic variation.
 
 ### Aggregation-Prone Region Scanner (APR)
 
-Sliding-window hydrophobicity analysis (7-residue window, Kyte-Doolittle scale) calibrated against 13 clinical-stage VH/VHH domains. Patches are scored as z-scores and percentiles against the clinical distribution. A design is falsified only if its worst patch exceeds the 95th percentile of successfully manufactured antibodies (threshold: 1.934 mean KD/residue). Caplacizumab (first approved VHH) validates at the 40.5th percentile.
+Sliding-window hydrophobicity analysis (7-residue window, Kyte-Doolittle scale) calibrated against 13 clinical-stage VH/VHH domains whose sequences were extracted from public PDB structures and patent filings (3 VHH: Caplacizumab, Ozoralizumab, Envafolimab; 10 mAb VH: Pembrolizumab, Nivolumab, Trastuzumab, Adalimumab, Rituximab, Bevacizumab, Atezolizumab, Durvalumab, Ipilimumab, Crizanlizumab). Patches are scored as z-scores and percentiles against this clinical distribution. A design is falsified only if its worst patch exceeds the 95th percentile (threshold: 1.934 mean KD/residue). Caplacizumab (first approved VHH) validates at the 40.5th percentile.
 
 ### VHH Hallmark Audit (FR2 Tetrad)
 
@@ -113,7 +113,7 @@ Hard requirements. Nothing passes unless all are satisfied.
 
 ### References
 
-APR calibration set: Jain et al. (2017) PNAS 114(5):944-949; Raybould et al. (2019) TAP dataset.
+APR calibration set: VH/VHH sequences from public PDB structures and patent filings for 13 approved/clinical-stage therapeutics.
 
 ## Roadmap: Toward Autonomous Biologics Discovery
 

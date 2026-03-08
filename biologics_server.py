@@ -342,19 +342,15 @@ def vhh_hallmark_audit(sequence: str, framework2_start: int = 36) -> str:
 # relative to a pre-computed distribution of max-patch hydrophobicity from
 # approved/clinical-stage antibody VH and VHH domains.
 #
-# Calibration set (n=13): Caplacizumab, Ozoralizumab, Envafolimab (VHH);
-# Pembrolizumab, Nivolumab, Trastuzumab, Adalimumab, Rituximab, Bevacizumab,
-# Atezolizumab, Durvalumab, Ipilimumab, Crizanlizumab (mAb VH).
+# Calibration set (n=13): sequences extracted from public PDB structures and
+# patent filings for approved/clinical-stage therapeutics.
+#   VHH (3): Caplacizumab, Ozoralizumab, Envafolimab
+#   mAb VH (10): Pembrolizumab, Nivolumab, Trastuzumab, Adalimumab, Rituximab,
+#                Bevacizumab, Atezolizumab, Durvalumab, Ipilimumab, Crizanlizumab
 #
 # A design is falsified only if its worst patch exceeds the 95th percentile
 # of successful clinical antibodies — grounding the constraint in empirical
 # manufacturing survival, not textbook heuristics.
-#
-# References:
-#   Jain et al. (2017) Biophysical properties of the clinical-stage antibody
-#   landscape. PNAS 114(5):944-949.
-#   Raybould et al. (2019) Therapeutic Antibody Profiler (TAP). Five metrics
-#   for 242 clinical-stage therapeutics.
 
 _KD_SCALE: dict[str, float] = {
     "I": 4.5,
