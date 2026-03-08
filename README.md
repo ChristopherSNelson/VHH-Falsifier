@@ -6,7 +6,7 @@
 
 An LLM agent designs VHH nanobody sequences, then immediately tries to break them. Deterministic tools scan for manufacturing liabilities (deamidation, aggregation, glycosylation). If anything fails, the agent mutates the design and re-tests. The loop repeats until the candidate passes every check — or the iteration budget runs out.
 
-No design exits the loop unfalsified.
+Nothing passes without being tested.
 
 ## The Loop
 
@@ -115,33 +115,29 @@ Hard requirements. Nothing passes unless all are satisfied.
 
 APR calibration set: VH/VHH sequences from public PDB structures and patent filings for 13 approved/clinical-stage therapeutics.
 
-## Roadmap: Toward Autonomous Biologics Discovery
+## Roadmap
 
-VHH-Falsifier is a functional prototype of agentic sequential falsification. Future iterations will transition from sequence-level heuristics to structural physics and state-of-the-art ML.
+Currently sequence-level heuristics only. Planned extensions:
 
-### 1. Structural Falsification (Spatial Physics)
+### 1. Structural Falsification
 
-SASA-aware liabilities: Integrate BioPython PDB or FreeSASA to context-qualify PTM motifs (e.g., NG deamidation). A liability is only falsified if its solvent accessible surface area exceeds 25 A^2, preventing the rejection of stable, buried residues.
+- SASA-aware liabilities via FreeSASA — only falsify surface-exposed PTM motifs (SASA > 25 A^2), stop rejecting buried residues that are fine
+- Boltz-2 for VHH-antigen complex prediction — binding energy, interface RMSD, CDR3 loop geometry validation
 
-Interface delta-G via folding: Invoke Boltz-2 to predict VHH-antigen complex structures and calculate binding energy and interface RMSD, moving beyond zero-shot sequence guessing to structural validation of CDR3 loop geometry. Boltz-2 outperforms AlphaFold-Multimer on antibody-antigen docking and supports protein, nucleic acid, and small molecule inputs under an MIT license.
+### 2. Better Developability Scoring
 
-### 2. High-Fidelity Developability (TDC Alignment)
+- SAP mapping instead of global GRAVY — spatially-resolved hydrophobic patches on solvent-exposed surface
+- AntiFold for inverse folding — CDR sequence optimization conditioned on 3D scaffold coordinates, replacing stochastic mutation
 
-Spatially-resolved aggregation: Upgrade from global GRAVY scores to Spatial Aggregation Propensity (SAP) mapping. This identifies local hydrophobic patches specifically on the solvent-exposed surface of the VHH, aligning with Therapeutics Data Commons (TDC) benchmarks like TAP.
+### 3. Immunogenicity
 
-Inverse folding: Replace stochastic mutation with an AntiFold layer to generate sequence manifolds pre-optimized for the target scaffold's 3D coordinates. AntiFold is purpose-built for antibody inverse folding with better CDR sequence recovery than general-purpose tools like ProteinMPNN.
+- BigMHC for MHC presentation prediction (mass-spec ground truth, not just binding affinity)
+- AbLang2/AntiBERTa2 for OAS-perplexity scoring — flag sequences that deviate from human germline distributions
 
-### 3. Next-Gen Immunogenicity Falsification
+### 4. Search Strategy
 
-Presentation-aware screening: Move beyond legacy NetMHCpan to BigMHC, a deep learning ensemble that predicts peptide presentation on the cell surface (mass spec ground truth) rather than just binding affinity.
-
-OAS-perplexity scoring: Use AbLang2 or AntiBERTa2 to calculate the naturalness (log-likelihood) of the VHH sequence relative to the Observed Antibody Space (OAS). These antibody-specific language models provide perplexity scores that reflect actual immunogenicity risk, unlike general protein models (ESM-2) that lack repertoire-level calibration. Any design with high perplexity (statistical deviation from human germline distributions) is falsified as a high immunogenicity risk.
-
-### 4. Complex Search and Optimization
-
-Monte Carlo Tree Search (MCTS): Transition from a linear loop to an MCTS-based mutation strategy, allowing the agent to explore multiple parallel mutation branches and prune those that fail early developability checks.
-
-Multi-agent red teaming: Implement a Generator vs. Falsifier adversarial debate, where the Generator is incentivized to find exploits in the Falsifier's deterministic rules, driving higher scaffold robustness.
+- MCTS-based mutation exploration instead of linear loop
+- Generator vs. Falsifier adversarial debate
 
 ## License
 
