@@ -1,5 +1,5 @@
 """
-VHH-Falsifier — FastMCP Biophysical Profiling Server
+VHH-Falsifier — FastMCP Developability Screening Server
 =====================================================
 
 Provides deterministic, agent-readable tools for evaluating
@@ -348,7 +348,7 @@ def vhh_hallmark_audit(sequence: str, framework2_start: int = 36) -> str:
 #   mAb VH (10): Pembrolizumab, Nivolumab, Trastuzumab, Adalimumab, Rituximab,
 #                Bevacizumab, Atezolizumab, Durvalumab, Ipilimumab, Crizanlizumab
 #
-# A design is falsified only if its worst patch exceeds the 95th percentile
+# A design fails screening only if its worst patch exceeds the 95th percentile
 # of successful clinical antibodies — grounding the constraint in empirical
 # manufacturing survival, not textbook heuristics.
 
@@ -402,8 +402,8 @@ _CST_MEAN = 1.431  # mean of max-patch scores
 _CST_STD = 0.306  # sample standard deviation
 _CST_N = 13
 
-# Falsification threshold: 95th percentile (parametric, one-tailed)
-_APR_FALSIFICATION_THRESHOLD = round(_CST_MEAN + 1.645 * _CST_STD, 3)  # ~1.934
+# Screening threshold: 95th percentile (parametric, one-tailed)
+_APR_SCREENING_THRESHOLD = round(_CST_MEAN + 1.645 * _CST_STD, 3)  # ~1.934
 
 # Gold standard: Caplacizumab (first approved VHH, anti-vWF)
 _CAPLACIZUMAB_MAX_PATCH = 1.357
@@ -438,7 +438,7 @@ def scan_aggregation_patches(
     Each 7-residue window is scored on the Kyte-Doolittle scale and compared
     against a pre-computed distribution of max-patch scores from 13
     clinical-stage antibody VH/VHH domains (Caplacizumab, Pembrolizumab,
-    Trastuzumab, etc.). A design is falsified only if its worst hydrophobic
+    Trastuzumab, etc.). A design fails screening only if its worst hydrophobic
     patch exceeds the 95th percentile of successful clinical therapeutics.
 
     Returns z-scores and percentiles relative to the clinical-stage reference
@@ -483,10 +483,10 @@ def scan_aggregation_patches(
     max_z = _compute_patch_z_score(max_patch_kd)
     max_percentile = _compute_patch_percentile(max_z)
 
-    # Flag patches that exceed the 95th percentile falsification threshold
+    # Flag patches that exceed the 95th percentile screening threshold
     flagged_patches: list[dict[str, str | int | float]] = []
     for i, mean_kd, patch_seq in window_means:
-        if mean_kd >= _APR_FALSIFICATION_THRESHOLD:
+        if mean_kd >= _APR_SCREENING_THRESHOLD:
             z = _compute_patch_z_score(mean_kd)
             flagged_patches.append(
                 {
@@ -505,8 +505,8 @@ def scan_aggregation_patches(
                 }
             )
 
-    # Determine pass/fail against the clinical falsification line
-    falsified = max_patch_kd >= _APR_FALSIFICATION_THRESHOLD
+    # Determine pass/fail against the clinical screening threshold
+    failed = max_patch_kd >= _APR_SCREENING_THRESHOLD
 
     report: dict = {
         "sequence_length": len(seq),
@@ -515,7 +515,7 @@ def scan_aggregation_patches(
             "reference": "Clinical-stage therapeutics (n=13 VH/VHH domains)",
             "cst_mean": _CST_MEAN,
             "cst_std": _CST_STD,
-            "falsification_threshold_95th": _APR_FALSIFICATION_THRESHOLD,
+            "screening_threshold_95th": _APR_SCREENING_THRESHOLD,
             "caplacizumab_max_patch": _CAPLACIZUMAB_MAX_PATCH,
         },
         "candidate_max_patch": {
@@ -526,29 +526,29 @@ def scan_aggregation_patches(
                 "BETTER"
                 if max_patch_kd <= _CAPLACIZUMAB_MAX_PATCH
                 else "WORSE"
-                if max_patch_kd > _APR_FALSIFICATION_THRESHOLD
+                if max_patch_kd > _APR_SCREENING_THRESHOLD
                 else "ACCEPTABLE"
             ),
         },
         "flagged_patches": flagged_patches,
         "flagged_patch_count": len(flagged_patches),
-        "overall_flag": "FAIL" if falsified else "PASS",
+        "overall_flag": "FAIL" if failed else "PASS",
     }
 
-    if falsified:
+    if failed:
         report["interpretation"] = (
             f"Candidate max patch ({round(max_patch_kd, 3)}) exceeds the 95th "
-            f"percentile ({_APR_FALSIFICATION_THRESHOLD}) of clinical-stage "
+            f"percentile ({_APR_SCREENING_THRESHOLD}) of clinical-stage "
             f"therapeutics (z={max_z}, {max_percentile}th percentile). "
-            f"This is a statistically grounded falsification — the design has "
-            f"a hydrophobic patch worse than >95% of successfully manufactured "
-            f"antibodies. Introduce polar substitutions to break the patch."
+            f"The design has a hydrophobic patch worse than >95% of successfully "
+            f"manufactured antibodies. Introduce polar substitutions to break "
+            f"the patch."
         )
     else:
         report["interpretation"] = (
             f"Candidate max patch ({round(max_patch_kd, 3)}) is within the "
             f"clinical-stage distribution (z={max_z}, {max_percentile}th "
-            f"percentile). No aggregation-prone regions exceed the falsification "
+            f"percentile). No aggregation-prone regions exceed the screening "
             f"threshold."
         )
 

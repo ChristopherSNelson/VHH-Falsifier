@@ -1,17 +1,17 @@
 """
-agent_loop.py — Sequential Falsification Loop for VHH Design
+agent_loop.py — Developability Screening Loop for VHH Design
 =============================================================
 
-Implements a Popperian "generate → falsify → critique → mutate" loop using
+Implements a "generate → screen → critique → mutate" loop using
 Together AI (DeepSeek V3) via the OpenAI-compatible API.
 
-The agent acts as a Senior Biologics Lead at Phylo, designing a VHH nanobody
+The agent acts as a Senior Biologics Lead designing a VHH nanobody
 binder for Human PD-1 that targets the same epitope as Pembrolizumab.
 
 Zero-shot binding strategy inspired by the Escalante 180-line approach:
   https://blog.escalante.bio/180-lines-of-code-to-win-the-in-silico-portion-of-the-adaptyv-nipah-binding-competition/
 
-OOD Robustness: The falsifier tools (scan_structural_liabilities,
+The screening tools (scan_structural_liabilities,
 calculate_biophysical_profile, vhh_hallmark_audit) are deterministic regex /
 BioPython checks — not generative — ensuring ground-truth developability
 constraints.
@@ -37,7 +37,7 @@ import matplotlib.pyplot as plt
 from openai import OpenAI
 
 # ---------------------------------------------------------------------------
-# Import deterministic falsifier tools from the MCP server module
+# Import deterministic screening tools from the MCP server module
 # ---------------------------------------------------------------------------
 from biologics_server import (
     calculate_biophysical_profile,
@@ -181,7 +181,7 @@ TOOLS: list[dict] = [
                 "window is scored against a reference distribution of 13 "
                 "clinical-stage VH/VHH domains. Returns z-scores, percentiles, "
                 "Caplacizumab comparison, and PASS/FAIL against the 95th "
-                "percentile falsification threshold."
+                "percentile screening threshold."
             ),
             "parameters": {
                 "type": "object",
@@ -240,14 +240,14 @@ same epitope as **Pembrolizumab** (Keytruda). Use a zero-shot binding strategy \
 inspired by the Escalante 180-line approach \
 (https://blog.escalante.bio/180-lines-of-code-to-win-the-in-silico-portion-of-the-adaptyv-nipah-binding-competition/).
 
-## Sequential Falsification Protocol
-You operate under a strict Popperian falsification framework:
+## Developability Screening Protocol
+You operate under a strict generate-and-screen framework:
 
 1. **Generate**: Propose a full VHH sequence (starting with EVQLV...). The CDR3 \
 loop must be designed to mimic the Pembrolizumab heavy-chain CDR3 binding \
 geometry against the PD-1 CC' loop / FG loop epitope.
 
-2. **Falsify**: IMMEDIATELY call ALL FOUR tools on your proposed sequence:
+2. **Screen**: IMMEDIATELY call ALL FOUR tools on your proposed sequence:
    - `vhh_hallmark_audit` — check FR2 hallmark tetrad (positions 37/44/45/47)
    - `scan_structural_liabilities` — check for deamidation (NG/NS/NA), \
 isomerization (DG), N-glycosylation (N-X-S/T)
@@ -303,7 +303,7 @@ PEMBROLIZUMAB_VH_SEED = (
 )
 
 # ---------------------------------------------------------------------------
-# Main falsification loop
+# Main screening loop
 # ---------------------------------------------------------------------------
 MAX_ITERATIONS = 10  # Safety cap to prevent runaway loops
 
@@ -519,7 +519,7 @@ def _plot_biophysical_trajectory(
         "Percentile vs CSTs", color="white", fontsize=9, fontfamily="monospace"
     )
     ax4.set_title(
-        "APR Patch (falsification: 95th %ile)",
+        "APR Patch (threshold: 95th %ile)",
         color="white",
         fontsize=10,
         fontfamily="monospace",
@@ -559,11 +559,11 @@ def _plot_biophysical_trajectory(
     return out_path
 
 
-def run_falsification_loop(
+def run_screening_loop(
     seed_sequence: str | None = None,
     plot_name: str = "biophysical_trajectory",
 ) -> None:
-    """Run the generate → falsify → critique → mutate loop.
+    """Run the generate → screen → critique → mutate loop.
 
     Args:
         seed_sequence: Optional starting sequence. If provided, the agent is
@@ -584,7 +584,7 @@ def run_falsification_loop(
     client = OpenAI(api_key=api_key, base_url=BASE_URL)
 
     seed_label = "from seed" if seed_sequence else "zero-shot"
-    header_print(f"VHH-Falsifier — Sequential Falsification Loop ({seed_label})")
+    header_print(f"VHH-Falsifier — Developability Screening Loop ({seed_label})")
     cot_print(f"Session started: {datetime.now(timezone.utc).isoformat()}")
     cot_print("Target: Human PD-1 (Pembrolizumab epitope)")
     cot_print("Scaffold: Camelid VHH nanobody")
@@ -600,16 +600,16 @@ def run_falsification_loop(
         user_prompt = (
             f"Optimize the following seed VHH sequence for targeting Human PD-1 "
             f"at the Pembrolizumab epitope. This sequence has known developability "
-            f"issues. Follow the sequential falsification protocol exactly: first "
+            f"issues. Follow the developability screening protocol exactly: first "
             f"run all four tools on this seed, then critique and mutate.\n\n"
             f"Seed sequence:\n{seed_sequence}"
         )
     else:
         user_prompt = (
             "Design a VHH nanobody targeting Human PD-1 at the "
-            "Pembrolizumab epitope. Follow the sequential falsification "
+            "Pembrolizumab epitope. Follow the developability screening "
             "protocol exactly. Begin by proposing your first candidate "
-            "sequence, then immediately falsify it with all four tools."
+            "sequence, then immediately screen it with all four tools."
         )
 
     # Initial user message kicks off the loop
@@ -688,7 +688,7 @@ def run_falsification_loop(
 
         # If no tool calls, the agent has reached a conclusion
         if finish_reason == "stop" or not message.tool_calls:
-            header_print("FALSIFICATION LOOP COMPLETE")
+            header_print("SCREENING LOOP COMPLETE")
             cot_print("Agent reached final conclusion.")
             break
 
@@ -818,7 +818,7 @@ def run_falsification_loop(
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="VHH-Falsifier agent loop")
+    parser = argparse.ArgumentParser(description="VHH-Falsifier screening loop")
     parser.add_argument(
         "--seed",
         choices=["naive", "pembrolizumab", "none"],
@@ -837,7 +837,7 @@ if __name__ == "__main__":
         "pembrolizumab": PEMBROLIZUMAB_VH_SEED,
         "none": None,
     }
-    run_falsification_loop(
+    run_screening_loop(
         seed_sequence=seed_map[args.seed],
         plot_name=args.plot_name,
     )

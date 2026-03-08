@@ -260,10 +260,10 @@ Then start fresh. Claude reads `CLAUDE.md` + `HANDOFF.md` on startup and picks u
 ### Project-specific overrides
 
 #### Role & Persona
-You are acting as a Senior Computational Biologics Engineer at an agentic drug discovery startup. Your mindset is falsification-first: you do not seek to validate designs, but to break them against clinical and manufacturing liabilities.
+You are acting as a Senior Computational Biologics Engineer at an agentic drug discovery startup. Your mindset is screening-first: every design must pass deterministic developability QC before advancing.
 
 #### Core Scientific Domain Knowledge
-- Targets: Nipah Virus G protein, Human PD-1 (Pembrolizumab epitope). The system is target-agnostic — new targets can be added without changing the falsification tools.
+- Targets: Nipah Virus G protein, Human PD-1 (Pembrolizumab epitope). The system is target-agnostic — new targets can be added without changing the screening tools.
 - Binding strategy: Zero-shot approach inspired by the Escalante 180-line strategy (https://blog.escalante.bio/180-lines-of-code-to-win-the-in-silico-portion-of-the-adaptyv-nipah-binding-competition/).
 - Scaffold: Camelid VHH (Nanobodies).
 - VHH Hallmark Tetrad: Always monitor FR2 positions 37, 44, 45, and 47 (Kabat/Chothia).
@@ -273,8 +273,8 @@ You are acting as a Senior Computational Biologics Engineer at an agentic drug d
 
 #### Implemented Components
 - `biologics_server.py` — FastMCP server with four deterministic tools: `calculate_biophysical_profile`, `scan_structural_liabilities`, `vhh_hallmark_audit`, `scan_aggregation_patches`. All return structured JSON.
-- `scan_aggregation_patches` — Clinically-calibrated APR scanner. 7-residue sliding window over Kyte-Doolittle, scored as z-scores/percentiles against a reference distribution of 13 clinical-stage VH/VHH domains. Falsification threshold: 95th percentile (1.934 mean KD/residue). Gold standard: Caplacizumab (max patch = 1.357, 40.5th percentile).
-- `agent_loop.py` — Sequential falsification loop using Together AI (DeepSeek V3) via OpenAI-compatible API. Includes per-iteration cost tracking, 4-panel developability dashboard (pI, GRAVY, liability count, APR percentile; auto-opens on macOS). CoT logged to `logs/agent_cot.log`. Features: auto-profiling (runs missing tools after each iteration for complete metrics), carry-forward + back-fill for missing data points, seed sequences (`--seed naive|pembrolizumab|none`, default: naive).
+- `scan_aggregation_patches` — Clinically-calibrated APR scanner. 7-residue sliding window over Kyte-Doolittle, scored as z-scores/percentiles against a reference distribution of 13 clinical-stage VH/VHH domains. Screening threshold: 95th percentile (1.934 mean KD/residue). Gold standard: Caplacizumab (max patch = 1.357, 40.5th percentile).
+- `agent_loop.py` — Developability screening loop using Together AI (DeepSeek V3) via OpenAI-compatible API. Includes per-iteration cost tracking, 4-panel developability dashboard (pI, GRAVY, liability count, APR percentile; auto-opens on macOS). CoT logged to `logs/agent_cot.log`. Features: auto-profiling (runs missing tools after each iteration for complete metrics), carry-forward + back-fill for missing data points, seed sequences (`--seed naive|pembrolizumab|none`, default: naive).
 - API provider: Together AI (US-hosted, `api.together.xyz`). Default model: `deepseek-ai/DeepSeek-V3`. Configurable via `MODEL_ID` env var.
 - API key: `TOGETHER_API_KEY` env var (set in `~/.zshrc`, never committed).
 
@@ -286,12 +286,12 @@ You are acting as a Senior Computational Biologics Engineer at an agentic drug d
 
 #### Coding Standard
 1. Tool-first design: Every tool returns structured JSON that a downstream LLM can reason over.
-2. Deterministic over generative: Use regex and BioPython for liability scanning, not LLM inference. Ground truth for falsification.
-3. Sequential falsification loop: The Generator is explicitly critiqued by the Falsifier tools. No design passes if any liability is detected.
+2. Deterministic over generative: Use regex and BioPython for liability scanning, not LLM inference. Ground truth for screening.
+3. Generate → screen loop: The Generator is explicitly critiqued by the screening tools. No design passes if any liability is detected.
 
 #### Formatting & Tone
 - Green terminal output for the agent's internal reasoning (Chain of Thought).
-- Documentation uses terms like "Sequential Falsification" and "Developability Constraints."
+- Documentation uses terms like "Developability Screening" and "Developability Constraints."
 - Reference the Escalante blog post in docstrings of any binding prediction logic.
 - README tone: academic, rigorous, minimal inline bold.
 
@@ -303,8 +303,8 @@ You are acting as a Senior Computational Biologics Engineer at an agentic drug d
 - DeepSeek V3 pI charge engineering: The model understands it needs Lys/Arg substitutions but takes several iterations to actually apply them to the sequence. This is a model reasoning issue, not a tool issue.
 
 #### Future Directions
-1. Structural falsification: Boltz-2 for VHH-antigen complex prediction, FreeSASA for SASA-aware liability context (only falsify surface-exposed PTM motifs, SASA > 25 A^2).
+1. Structural screening: Boltz-2 for VHH-antigen complex prediction, FreeSASA for SASA-aware liability context (only flag surface-exposed PTM motifs, SASA > 25 A^2).
 2. Inverse folding: AntiFold for CDR sequence optimization pre-conditioned on 3D scaffold coordinates.
 3. Immunogenicity: AbLang2/AntiBERTa2 for OAS-perplexity humanness scoring, BigMHC/PRIME 2.0 for MHC presentation prediction.
-4. Search strategy: MCTS-based mutation exploration instead of linear loop. Multi-agent Generator vs. Falsifier adversarial debate.
+4. Search strategy: MCTS-based mutation exploration instead of linear loop. Multi-agent Generator vs. Screener adversarial debate.
 5. Spatially-resolved aggregation: SAP mapping on solvent-exposed surface, aligned with TDC/TAP benchmarks.

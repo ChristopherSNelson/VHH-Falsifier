@@ -1,6 +1,6 @@
-# VHH-Falsifier: Agentic Sequential Falsification for Nanobody Engineering
+# VHH-Falsifier: Agentic Developability Screening for Nanobody Engineering
 
-![VHH-Falsifier Sequential Falsification Loop](assets/infographic.png)
+![VHH-Falsifier Developability Screening Loop](assets/infographic.png)
 
 ## What This Does
 
@@ -11,20 +11,20 @@ Nothing passes without being tested.
 ## The Loop
 
 ```
-GENERATE → FALSIFY → CRITIQUE → MUTATE → RE-FALSIFY → ... → PASS
+GENERATE → SCREEN → CRITIQUE → MUTATE → RE-SCREEN → ... → PASS
 ```
 
 1. Generate — Propose a VHH sequence with CDR loops targeting the binding epitope.
-2. Falsify — Run all four deterministic tools against the candidate.
+2. Screen — Run all four deterministic tools against the candidate.
 3. Critique — Diagnose each failure: exact motif, position, mechanism, clinical consequence.
 4. Mutate — Apply point mutations to fix liabilities while preserving binding geometry.
-5. Re-Falsify — Re-test from scratch. Repeat until clean.
+5. Re-Screen — Re-test from scratch. Repeat until clean.
 
 ## Technical Heritage
 
-Zero-shot binding strategy adapted from the [Escalante 180-line approach](https://blog.escalante.bio/180-lines-of-code-to-win-the-in-silico-portion-of-the-adaptyv-nipah-binding-competition/), extended with a developability falsification layer.
+Zero-shot binding strategy adapted from the [Escalante 180-line approach](https://blog.escalante.bio/180-lines-of-code-to-win-the-in-silico-portion-of-the-adaptyv-nipah-binding-competition/), extended with a developability screening layer.
 
-## Falsification Tools
+## Screening Tools
 
 ### Liability Scanning (PTM Hotspots)
 
@@ -43,7 +43,7 @@ Deterministic regex — no LLM inference, no stochastic variation.
 
 ### Aggregation-Prone Region Scanner (APR)
 
-Sliding-window hydrophobicity analysis (7-residue window, Kyte-Doolittle scale) calibrated against 13 clinical-stage VH/VHH domains whose sequences were extracted from public PDB structures and patent filings (3 VHH: Caplacizumab, Ozoralizumab, Envafolimab; 10 mAb VH: Pembrolizumab, Nivolumab, Trastuzumab, Adalimumab, Rituximab, Bevacizumab, Atezolizumab, Durvalumab, Ipilimumab, Crizanlizumab). Patches are scored as z-scores and percentiles against this clinical distribution. A design is falsified only if its worst patch exceeds the 95th percentile (threshold: 1.934 mean KD/residue). Caplacizumab (first approved VHH) validates at the 40.5th percentile.
+Sliding-window hydrophobicity analysis (7-residue window, Kyte-Doolittle scale) calibrated against 13 clinical-stage VH/VHH domains whose sequences were extracted from public PDB structures and patent filings (3 VHH: Caplacizumab, Ozoralizumab, Envafolimab; 10 mAb VH: Pembrolizumab, Nivolumab, Trastuzumab, Adalimumab, Rituximab, Bevacizumab, Atezolizumab, Durvalumab, Ipilimumab, Crizanlizumab). Patches are scored as z-scores and percentiles against this clinical distribution. A design fails screening only if its worst patch exceeds the 95th percentile (threshold: 1.934 mean KD/residue). Caplacizumab (first approved VHH) validates at the 40.5th percentile.
 
 ### VHH Hallmark Audit (FR2 Tetrad)
 
@@ -61,20 +61,25 @@ Checks Kabat positions 37, 44, 45, 47 for camelid vs. human VH identity:
 ```
 agent_loop.py                    biologics_server.py
 ┌─────────────────────┐          ┌──────────────────────────────┐
-│  LLM Agent          │          │  FastMCP Server              │
-│  (DeepSeek V3 /     │  tools   │                              │
-│   Together AI)      │────────→ │ scan_structural_liabilities  │
+│  LLM Agent          │  import  │  Screening Tools             │
+│  (DeepSeek V3 /     │────────→ │                              │
+│   Together AI)      │          │ scan_structural_liabilities  │
 │                     │          │ calculate_biophysical_profile│
-│  Generate → Falsify │←──────── │ vhh_hallmark_audit           │
-│  → Critique → Mutate│  JSON    │                              │
+│  Generate → Screen  │←──────── │ vhh_hallmark_audit           │
+│  → Critique → Mutate│  JSON    │ scan_aggregation_patches     │
 └─────────────────────┘          └──────────────────────────────┘
         │
         ▼
   logs/agent_cot.log
 ```
 
-- `biologics_server.py` — FastMCP server, four deterministic tools, structured JSON output.
-- `agent_loop.py` — Falsification loop via OpenAI-compatible API. Per-iteration cost tracking. Green CoT terminal output, logged to `logs/agent_cot.log`.
+Two usage modes:
+
+- **Automated** — `python agent_loop.py` imports the tools directly and runs the full generate → screen → mutate loop unattended.
+- **Interactive** — register `biologics_server.py` as an MCP server in Claude Code, then call the tools on demand during a conversation.
+
+- `biologics_server.py` — Four deterministic screening tools, structured JSON output. Runnable as a standalone FastMCP server or importable as a Python module.
+- `agent_loop.py` — Automated screening loop via OpenAI-compatible API. Per-iteration cost tracking. Green CoT terminal output, logged to `logs/agent_cot.log`.
 
 ### Developability Dashboard
 
@@ -119,9 +124,9 @@ APR calibration set: VH/VHH sequences from public PDB structures and patent fili
 
 Currently sequence-level heuristics only. Planned extensions:
 
-### 1. Structural Falsification
+### 1. Structural Screening
 
-- **SASA-aware liabilities** via FreeSASA — only falsify surface-exposed PTM motifs (SASA > 25 A^2), stop rejecting buried residues that are fine
+- **SASA-aware liabilities** via FreeSASA — only flag surface-exposed PTM motifs (SASA > 25 A^2), stop rejecting buried residues that are fine
 - **Boltz-2** for VHH-antigen complex prediction — binding energy, interface RMSD, CDR3 loop geometry. Chosen over AlphaFold-Multimer for better antibody-antigen docking accuracy; MIT license, supports protein + nucleic acid + small molecule inputs
 
 ### 2. Better Developability Scoring
@@ -137,7 +142,7 @@ Currently sequence-level heuristics only. Planned extensions:
 ### 4. Search Strategy
 
 - **MCTS-based mutation exploration** instead of linear loop — explore parallel mutation branches, prune early failures
-- **Generator vs. Falsifier adversarial debate** — Generator tries to exploit gaps in deterministic rules, driving more robust designs
+- **Generator vs. Screener adversarial debate** — Generator tries to exploit gaps in deterministic rules, driving more robust designs
 
 ## License
 
