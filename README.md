@@ -15,7 +15,7 @@ GENERATE → FALSIFY → CRITIQUE → MUTATE → RE-FALSIFY → ... → PASS
 ```
 
 1. Generate — Propose a VHH sequence with CDR loops targeting the binding epitope.
-2. Falsify — Run all three deterministic tools against the candidate.
+2. Falsify — Run all four deterministic tools against the candidate.
 3. Critique — Diagnose each failure: exact motif, position, mechanism, clinical consequence.
 4. Mutate — Apply point mutations to fix liabilities while preserving binding geometry.
 5. Re-Falsify — Re-test from scratch. Repeat until clean.
@@ -40,6 +40,10 @@ Deterministic regex — no LLM inference, no stochastic variation.
 
 - pI < 7.5 → precipitation risk near physiological pH
 - GRAVY > 0.0 → elevated hydrophobicity, aggregation-prone
+
+### Aggregation-Prone Region Scanner (APR)
+
+Sliding-window hydrophobicity analysis (7-residue window, Kyte-Doolittle scale) calibrated against 13 clinical-stage VH/VHH domains. Patches are scored as z-scores and percentiles against the clinical distribution. A design is falsified only if its worst patch exceeds the 95th percentile of successfully manufactured antibodies (threshold: 1.934 mean KD/residue). Caplacizumab (first approved VHH) validates at the 40.5th percentile.
 
 ### VHH Hallmark Audit (FR2 Tetrad)
 
