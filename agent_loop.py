@@ -307,6 +307,9 @@ def _plot_biophysical_trajectory(
     PLOT_DIR.mkdir(exist_ok=True)
     out_path = PLOT_DIR / "biophysical_trajectory.png"
 
+    def _is_imputed(point: dict, key: str) -> bool:
+        return key in point.get("_imputed", set())
+
     iters = [p["iteration"] for p in points]
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 8), facecolor="#0a0a0a")
@@ -337,14 +340,15 @@ def _plot_biophysical_trajectory(
         iters, pis, c=colors_pi, s=70, zorder=2, edgecolors="white", linewidths=0.8
     )
     for i, (it, pi) in enumerate(zip(iters, pis)):
+        label = "NA" if _is_imputed(points[i], "pI") else f"{pi:.1f}"
         ax1.annotate(
-            f"{pi:.1f}",
+            label,
             (it, pi),
             textcoords="offset points",
             xytext=(0, 10),
             ha="center",
             fontsize=8,
-            color="white",
+            color="#888888" if label == "NA" else "white",
             fontfamily="monospace",
         )
     ax1.set_ylabel(
@@ -389,15 +393,16 @@ def _plot_biophysical_trajectory(
     ax2.scatter(
         iters, gravys, c=colors_gv, s=70, zorder=2, edgecolors="white", linewidths=0.8
     )
-    for it, gv in zip(iters, gravys):
+    for i, (it, gv) in enumerate(zip(iters, gravys)):
+        label = "NA" if _is_imputed(points[i], "gravy") else f"{gv:.3f}"
         ax2.annotate(
-            f"{gv:.3f}",
+            label,
             (it, gv),
             textcoords="offset points",
             xytext=(0, 10),
             ha="center",
             fontsize=8,
-            color="white",
+            color="#888888" if label == "NA" else "white",
             fontfamily="monospace",
         )
     ax2.set_ylabel("GRAVY Score", color="white", fontsize=9, fontfamily="monospace")
@@ -440,15 +445,16 @@ def _plot_biophysical_trajectory(
         alpha=0.85,
         zorder=2,
     )
-    for it, lc in zip(iters, liabs):
+    for i, (it, lc) in enumerate(zip(iters, liabs)):
+        label = "NA" if _is_imputed(points[i], "liability_count") else str(lc)
         ax3.annotate(
-            str(lc),
+            label,
             (it, lc),
             textcoords="offset points",
             xytext=(0, 6),
             ha="center",
             fontsize=9,
-            color="white",
+            color="#888888" if label == "NA" else "white",
             fontfamily="monospace",
             fontweight="bold",
         )
@@ -478,15 +484,16 @@ def _plot_biophysical_trajectory(
         edgecolors="white",
         linewidths=0.8,
     )
-    for it, pct in zip(iters, apr_pcts):
+    for i, (it, pct) in enumerate(zip(iters, apr_pcts)):
+        label = "NA" if _is_imputed(points[i], "apr_percentile") else f"{pct:.0f}%"
         ax4.annotate(
-            f"{pct:.0f}%",
+            label,
             (it, pct),
             textcoords="offset points",
             xytext=(0, 10),
             ha="center",
             fontsize=8,
-            color="white",
+            color="#888888" if label == "NA" else "white",
             fontfamily="monospace",
         )
     ax4.set_ylabel(
@@ -686,13 +693,28 @@ def run_falsification_loop() -> None:
     cot_print(f"Output tokens: {total_output_tokens:,}")
     cot_print(f"Total cost:    ${final_cost:.4f}")
 
-    # Generate developability dashboard — carry forward missing metrics
+    # Generate developability dashboard — fill missing metrics
+    # Strategy: carry forward from previous; if no previous, back-fill from
+    # the next known value. Track which points were imputed so the plot can
+    # label them "NA".
     dashboard_points = sorted(iteration_metrics.values(), key=lambda x: x["iteration"])
-    _carry_keys = ("pI", "gravy", "liability_count", "apr_percentile")
+    _fill_keys = ("pI", "gravy", "liability_count", "apr_percentile")
+
+    # Forward fill
     for i in range(1, len(dashboard_points)):
-        for key in _carry_keys:
+        for key in _fill_keys:
             if key not in dashboard_points[i]:
-                dashboard_points[i][key] = dashboard_points[i - 1].get(key, 0)
+                if key in dashboard_points[i - 1]:
+                    dashboard_points[i][key] = dashboard_points[i - 1][key]
+                    dashboard_points[i].setdefault("_imputed", set()).add(key)
+
+    # Back-fill any remaining gaps (first points with no predecessor)
+    for i in range(len(dashboard_points) - 2, -1, -1):
+        for key in _fill_keys:
+            if key not in dashboard_points[i]:
+                if key in dashboard_points[i + 1]:
+                    dashboard_points[i][key] = dashboard_points[i + 1][key]
+                    dashboard_points[i].setdefault("_imputed", set()).add(key)
 
     if len(dashboard_points) >= 2:
         plot_path = _plot_biophysical_trajectory(dashboard_points)
