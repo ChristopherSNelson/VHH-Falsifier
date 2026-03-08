@@ -111,15 +111,9 @@ Hard requirements. Nothing passes unless all are satisfied.
 | N-Glycosylation sequons | Zero in CDRs | Ensure batch consistency |
 | FR2 hallmark tetrad | Assessed and documented | Structural integrity of VHH scaffold |
 
-### Aggregation-Prone Region (APR) Detection
+### References
 
-The APR scanner uses a 7-residue sliding window over the Kyte-Doolittle hydrophobicity scale, calibrated against real clinical data rather than arbitrary cutoffs.
-
-Clinical-stage benchmarking: Each window is compared against a pre-computed distribution of max-patch hydrophobicity scores from 13 approved and clinical-stage VH/VHH domains (Caplacizumab, Pembrolizumab, Trastuzumab, Adalimumab, Nivolumab, Rituximab, Bevacizumab, Atezolizumab, Durvalumab, Ipilimumab, Ozoralizumab, Envafolimab, Crizanlizumab).
-
-Statistical falsification: A design is only falsified if its worst hydrophobic patch exceeds the 95th percentile of successful clinical antibodies (threshold: 1.934 mean KD/residue). The tool returns z-scores and percentiles relative to this distribution, plus a direct comparison to Caplacizumab (first approved VHH, max patch = 1.357).
-
-References: Jain et al. (2017) PNAS 114(5):944-949; Raybould et al. (2019) TAP dataset.
+APR calibration set: Jain et al. (2017) PNAS 114(5):944-949; Raybould et al. (2019) TAP dataset.
 
 ## Roadmap: Toward Autonomous Biologics Discovery
 
