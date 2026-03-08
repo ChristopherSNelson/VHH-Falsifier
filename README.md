@@ -121,23 +121,23 @@ Currently sequence-level heuristics only. Planned extensions:
 
 ### 1. Structural Falsification
 
-- SASA-aware liabilities via FreeSASA — only falsify surface-exposed PTM motifs (SASA > 25 A^2), stop rejecting buried residues that are fine
-- Boltz-2 for VHH-antigen complex prediction — binding energy, interface RMSD, CDR3 loop geometry validation
+- **SASA-aware liabilities** via FreeSASA — only falsify surface-exposed PTM motifs (SASA > 25 A^2), stop rejecting buried residues that are fine
+- **Boltz-2** for VHH-antigen complex prediction — binding energy, interface RMSD, CDR3 loop geometry. Chosen over AlphaFold-Multimer for better antibody-antigen docking accuracy; MIT license, supports protein + nucleic acid + small molecule inputs
 
 ### 2. Better Developability Scoring
 
-- SAP mapping instead of global GRAVY — spatially-resolved hydrophobic patches on solvent-exposed surface
-- AntiFold for inverse folding — CDR sequence optimization conditioned on 3D scaffold coordinates, replacing stochastic mutation
+- **SAP mapping** instead of global GRAVY — spatially-resolved hydrophobic patches on solvent-exposed surface, aligned with TDC/TAP benchmarks
+- **AntiFold** for inverse folding — CDR sequence optimization conditioned on 3D scaffold coordinates, replacing stochastic mutation. Purpose-built for antibodies with better CDR sequence recovery than ProteinMPNN
 
 ### 3. Immunogenicity
 
-- BigMHC for MHC presentation prediction (mass-spec ground truth, not just binding affinity)
-- AbLang2/AntiBERTa2 for OAS-perplexity scoring — flag sequences that deviate from human germline distributions
+- **BigMHC** for MHC presentation prediction — trained on mass-spec data (peptides actually presented on cell surface), not just binding affinity like NetMHCpan
+- **AbLang2/AntiBERTa2** for OAS-perplexity scoring — log-likelihood of VHH sequence against Observed Antibody Space. Antibody-specific language models calibrated on repertoire data, unlike general protein models (ESM-2). High perplexity = immunogenicity risk
 
 ### 4. Search Strategy
 
-- MCTS-based mutation exploration instead of linear loop
-- Generator vs. Falsifier adversarial debate
+- **MCTS-based mutation exploration** instead of linear loop — explore parallel mutation branches, prune early failures
+- **Generator vs. Falsifier adversarial debate** — Generator tries to exploit gaps in deterministic rules, driving more robust designs
 
 ## License
 
