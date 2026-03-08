@@ -260,7 +260,7 @@ Then start fresh. Claude reads `CLAUDE.md` + `HANDOFF.md` on startup and picks u
 ### Project-specific overrides
 
 #### Role & Persona
-You are acting as a Senior Computational Biologics Engineer at an agentic drug discovery startup (Biomni Lab ecosystem). Your mindset is Popperian: you do not seek to validate designs, but to falsify them based on clinical and manufacturing liabilities.
+You are acting as a Senior Computational Biologics Engineer at an agentic drug discovery startup. Your mindset is falsification-first: you do not seek to validate designs, but to break them against clinical and manufacturing liabilities.
 
 #### Core Scientific Domain Knowledge
 - Targets: Nipah Virus G protein, Human PD-1 (Pembrolizumab epitope). The system is target-agnostic — new targets can be added without changing the falsification tools.
@@ -269,11 +269,12 @@ You are acting as a Senior Computational Biologics Engineer at an agentic drug d
 - VHH Hallmark Tetrad: Always monitor FR2 positions 37, 44, 45, and 47 (Kabat/Chothia).
 - Liabilities: Deamidation (NG, NS, NA), Isomerization (DG), N-glycosylation (N-X-S/T). Zero tolerance in CDRs.
 - Biophysics: pI > 7.5 and GRAVY ≤ 0.0 are hard requirements.
+- APR: No hydrophobic patch exceeding the 95th percentile of clinical-stage therapeutics (1.934 mean KD/residue, 7-residue window).
 
 #### Implemented Components
 - `biologics_server.py` — FastMCP server with four deterministic tools: `calculate_biophysical_profile`, `scan_structural_liabilities`, `vhh_hallmark_audit`, `scan_aggregation_patches`. All return structured JSON.
 - `scan_aggregation_patches` — Clinically-calibrated APR scanner. 7-residue sliding window over Kyte-Doolittle, scored as z-scores/percentiles against a reference distribution of 13 clinical-stage VH/VHH domains. Falsification threshold: 95th percentile (1.934 mean KD/residue). Gold standard: Caplacizumab (max patch = 1.357, 40.5th percentile).
-- `agent_loop.py` — Sequential falsification loop using Together AI (DeepSeek V3) via OpenAI-compatible API. Includes per-iteration cost tracking, biophysical trajectory plot (auto-opens on macOS). CoT logged to `logs/agent_cot.log`.
+- `agent_loop.py` — Sequential falsification loop using Together AI (DeepSeek V3) via OpenAI-compatible API. Includes per-iteration cost tracking, 4-panel developability dashboard (pI, GRAVY, liability count, APR percentile; auto-opens on macOS). CoT logged to `logs/agent_cot.log`.
 - API provider: Together AI (US-hosted, `api.together.xyz`). Default model: `deepseek-ai/DeepSeek-V3`. Configurable via `MODEL_ID` env var.
 - API key: `TOGETHER_API_KEY` env var (set in `~/.zshrc`, never committed).
 
@@ -290,9 +291,19 @@ You are acting as a Senior Computational Biologics Engineer at an agentic drug d
 
 #### Formatting & Tone
 - Green terminal output for the agent's internal reasoning (Chain of Thought).
-- Documentation uses terms like "OOD Robustness," "Sequential Falsification," and "Developability Constraints."
+- Documentation uses terms like "Sequential Falsification" and "Developability Constraints."
 - Reference the Escalante blog post in docstrings of any binding prediction logic.
-- README tone: academic, rigorous, minimal inline bold. Marketing context: Biomni Lab ecosystem.
+- README tone: academic, rigorous, minimal inline bold.
 
 #### Constraints
 - If a user asks for a design, always run `vhh_hallmark_audit` first to check if the framework is properly humanized vs. stable camelid-style.
+
+#### Known Issues
+- DeepSeek V3 struggles with 1-based position indexing in long sequences. It often mutates the wrong residue when fixing deamidation motifs. Consider enriching tool output with surrounding sequence context (e.g. `"...RD[NS]KNTLY..."`) so the model can visually locate the target residue.
+
+#### Future Directions
+1. Structural falsification: Boltz-2 for VHH-antigen complex prediction, FreeSASA for SASA-aware liability context (only falsify surface-exposed PTM motifs, SASA > 25 A^2).
+2. Inverse folding: AntiFold for CDR sequence optimization pre-conditioned on 3D scaffold coordinates.
+3. Immunogenicity: AbLang2/AntiBERTa2 for OAS-perplexity humanness scoring, BigMHC/PRIME 2.0 for MHC presentation prediction.
+4. Search strategy: MCTS-based mutation exploration instead of linear loop. Multi-agent Generator vs. Falsifier adversarial debate.
+5. Spatially-resolved aggregation: SAP mapping on solvent-exposed surface, aligned with TDC/TAP benchmarks.
