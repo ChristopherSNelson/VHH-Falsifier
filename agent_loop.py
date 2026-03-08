@@ -686,8 +686,14 @@ def run_falsification_loop() -> None:
     cot_print(f"Output tokens: {total_output_tokens:,}")
     cot_print(f"Total cost:    ${final_cost:.4f}")
 
-    # Generate developability dashboard
+    # Generate developability dashboard — carry forward missing metrics
     dashboard_points = sorted(iteration_metrics.values(), key=lambda x: x["iteration"])
+    _carry_keys = ("pI", "gravy", "liability_count", "apr_percentile")
+    for i in range(1, len(dashboard_points)):
+        for key in _carry_keys:
+            if key not in dashboard_points[i]:
+                dashboard_points[i][key] = dashboard_points[i - 1].get(key, 0)
+
     if len(dashboard_points) >= 2:
         plot_path = _plot_biophysical_trajectory(dashboard_points)
         cot_print(f"Developability dashboard saved: {plot_path}")

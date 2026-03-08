@@ -298,8 +298,9 @@ You are acting as a Senior Computational Biologics Engineer at an agentic drug d
 #### Constraints
 - If a user asks for a design, always run `vhh_hallmark_audit` first to check if the framework is properly humanized vs. stable camelid-style.
 
-#### Known Issues
-- DeepSeek V3 struggles with 1-based position indexing in long sequences. It often mutates the wrong residue when fixing deamidation motifs. Consider enriching tool output with surrounding sequence context (e.g. `"...RD[NS]KNTLY..."`) so the model can visually locate the target residue.
+#### Known Issues (resolved)
+- DeepSeek V3 position indexing: Previously struggled to locate residues by position number alone. Fixed by adding a `context` field to `scan_structural_liabilities` output (e.g. `"...TISRD[NS]KNTLY..."`). The model now correctly identifies and mutates the target residue.
+- DeepSeek V3 pI charge engineering: The model understands it needs Lys/Arg substitutions but takes several iterations to actually apply them to the sequence. This is a model reasoning issue, not a tool issue.
 
 #### Future Directions
 1. Structural falsification: Boltz-2 for VHH-antigen complex prediction, FreeSASA for SASA-aware liability context (only falsify surface-exposed PTM motifs, SASA > 25 A^2).
