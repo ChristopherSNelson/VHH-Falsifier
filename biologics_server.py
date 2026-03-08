@@ -329,5 +329,230 @@ def vhh_hallmark_audit(sequence: str, framework2_start: int = 36) -> str:
     return result
 
 
+# --- Aggregation-Prone Region (APR) scanning ---------------------------------
+# Sliding-window hydrophobicity analysis calibrated against clinical-stage
+# therapeutics. Instead of arbitrary cutoffs, each patch is scored as a z-score
+# relative to a pre-computed distribution of max-patch hydrophobicity from
+# approved/clinical-stage antibody VH and VHH domains.
+#
+# Calibration set (n=13): Caplacizumab, Ozoralizumab, Envafolimab (VHH);
+# Pembrolizumab, Nivolumab, Trastuzumab, Adalimumab, Rituximab, Bevacizumab,
+# Atezolizumab, Durvalumab, Ipilimumab, Crizanlizumab (mAb VH).
+#
+# A design is falsified only if its worst patch exceeds the 95th percentile
+# of successful clinical antibodies — grounding the constraint in empirical
+# manufacturing survival, not textbook heuristics.
+#
+# References:
+#   Jain et al. (2017) Biophysical properties of the clinical-stage antibody
+#   landscape. PNAS 114(5):944-949.
+#   Raybould et al. (2019) Therapeutic Antibody Profiler (TAP). Five metrics
+#   for 242 clinical-stage therapeutics.
+
+_KD_SCALE: dict[str, float] = {
+    "I": 4.5,
+    "V": 4.2,
+    "L": 3.8,
+    "F": 2.8,
+    "C": 2.5,
+    "M": 1.9,
+    "A": 1.8,
+    "G": -0.4,
+    "T": -0.7,
+    "S": -0.8,
+    "W": -0.9,
+    "Y": -1.3,
+    "P": -1.6,
+    "H": -3.2,
+    "D": -3.5,
+    "E": -3.5,
+    "N": -3.5,
+    "Q": -3.5,
+    "K": -3.9,
+    "R": -4.5,
+}
+
+_APR_WINDOW_SIZE = 7
+
+# --- Clinical-stage calibration set ------------------------------------------
+# Pre-computed max 7-residue KD window scores for approved/clinical VH and VHH
+# domains. Used to derive the reference distribution for z-score calculation.
+
+_CST_MAX_PATCH_SCORES: dict[str, float] = {
+    "Caplacizumab_VHH": 1.357,
+    "Ozoralizumab_VHH": 2.086,
+    "Envafolimab_VHH": 1.371,
+    "Pembrolizumab_VH": 1.029,
+    "Nivolumab_VH": 2.014,
+    "Trastuzumab_VH": 1.371,
+    "Adalimumab_VH": 1.371,
+    "Rituximab_VH": 1.400,
+    "Bevacizumab_VH": 1.371,
+    "Atezolizumab_VH": 1.371,
+    "Durvalumab_VH": 1.371,
+    "Ipilimumab_VH": 1.457,
+    "Crizanlizumab_VH": 1.029,
+}
+
+# Distribution statistics (7-residue KD window, n=13 clinical-stage therapeutics)
+_CST_MEAN = 1.431  # mean of max-patch scores
+_CST_STD = 0.306  # sample standard deviation
+_CST_N = 13
+
+# Falsification threshold: 95th percentile (parametric, one-tailed)
+_APR_FALSIFICATION_THRESHOLD = round(_CST_MEAN + 1.645 * _CST_STD, 3)  # ~1.934
+
+# Gold standard: Caplacizumab (first approved VHH, anti-vWF)
+_CAPLACIZUMAB_MAX_PATCH = 1.357
+
+
+def _compute_patch_z_score(max_patch_kd: float) -> float:
+    """Compute z-score of a max-patch KD score against the CST distribution."""
+    if _CST_STD == 0:
+        return 0.0
+    return round((max_patch_kd - _CST_MEAN) / _CST_STD, 2)
+
+
+def _compute_patch_percentile(z_score: float) -> float:
+    """Approximate percentile from z-score using the error function.
+
+    Uses math.erf for a closed-form normal CDF — no scipy dependency.
+    """
+    import math
+
+    cdf = 0.5 * (1.0 + math.erf(z_score / math.sqrt(2.0)))
+    return round(cdf * 100, 1)
+
+
+@mcp.tool()
+def scan_aggregation_patches(
+    sequence: str,
+    window_size: int = _APR_WINDOW_SIZE,
+) -> str:
+    """Scan for aggregation-prone regions using clinically-calibrated sliding-window
+    hydrophobicity.
+
+    Each 7-residue window is scored on the Kyte-Doolittle scale and compared
+    against a pre-computed distribution of max-patch scores from 13
+    clinical-stage antibody VH/VHH domains (Caplacizumab, Pembrolizumab,
+    Trastuzumab, etc.). A design is falsified only if its worst hydrophobic
+    patch exceeds the 95th percentile of successful clinical therapeutics.
+
+    Returns z-scores and percentiles relative to the clinical-stage reference
+    distribution, plus the Caplacizumab gold-standard comparison.
+
+    Args:
+        sequence: Single-letter amino-acid sequence.
+        window_size: Sliding window width (default 7).
+
+    Returns:
+        JSON string with per-patch details, z-scores, percentiles, clinical
+        comparison, and overall PASS/FAIL flag.
+    """
+    seq = _clean_sequence(sequence)
+
+    if not seq:
+        return json.dumps({"error": "Empty or invalid sequence provided."})
+
+    invalid = set(seq) - set(_KD_SCALE.keys())
+    if invalid:
+        return json.dumps(
+            {"error": f"Non-standard residues detected: {sorted(invalid)}."}
+        )
+
+    if len(seq) < window_size:
+        return json.dumps(
+            {
+                "error": f"Sequence too short ({len(seq)} aa) for window size {window_size}."
+            }
+        )
+
+    scores = [_KD_SCALE[aa] for aa in seq]
+
+    # Compute all window means
+    window_means: list[tuple[int, float, str]] = []
+    for i in range(len(seq) - window_size + 1):
+        mean_kd = sum(scores[i : i + window_size]) / window_size
+        window_means.append((i, mean_kd, seq[i : i + window_size]))
+
+    # Find the max patch score for the candidate
+    max_patch_kd = max(m for _, m, _ in window_means)
+    max_z = _compute_patch_z_score(max_patch_kd)
+    max_percentile = _compute_patch_percentile(max_z)
+
+    # Flag patches that exceed the 95th percentile falsification threshold
+    flagged_patches: list[dict[str, str | int | float]] = []
+    for i, mean_kd, patch_seq in window_means:
+        if mean_kd >= _APR_FALSIFICATION_THRESHOLD:
+            z = _compute_patch_z_score(mean_kd)
+            flagged_patches.append(
+                {
+                    "start_position": i + 1,
+                    "end_position": i + window_size,
+                    "patch_sequence": patch_seq,
+                    "mean_hydrophobicity": round(mean_kd, 3),
+                    "z_score": z,
+                    "percentile": _compute_patch_percentile(z),
+                    "suggestion": (
+                        f"Break hydrophobic patch '{patch_seq}' by introducing a "
+                        f"polar residue (Ser, Thr, Asn, Asp, or Glu) at a "
+                        f"solvent-exposed position within residues "
+                        f"{i + 1}-{i + window_size}."
+                    ),
+                }
+            )
+
+    # Determine pass/fail against the clinical falsification line
+    falsified = max_patch_kd >= _APR_FALSIFICATION_THRESHOLD
+
+    report: dict = {
+        "sequence_length": len(seq),
+        "window_size": window_size,
+        "calibration": {
+            "reference": "Clinical-stage therapeutics (n=13 VH/VHH domains)",
+            "cst_mean": _CST_MEAN,
+            "cst_std": _CST_STD,
+            "falsification_threshold_95th": _APR_FALSIFICATION_THRESHOLD,
+            "caplacizumab_max_patch": _CAPLACIZUMAB_MAX_PATCH,
+        },
+        "candidate_max_patch": {
+            "mean_hydrophobicity": round(max_patch_kd, 3),
+            "z_score": max_z,
+            "percentile": max_percentile,
+            "vs_caplacizumab": (
+                "BETTER"
+                if max_patch_kd <= _CAPLACIZUMAB_MAX_PATCH
+                else "WORSE"
+                if max_patch_kd > _APR_FALSIFICATION_THRESHOLD
+                else "ACCEPTABLE"
+            ),
+        },
+        "flagged_patches": flagged_patches,
+        "flagged_patch_count": len(flagged_patches),
+        "overall_flag": "FAIL" if falsified else "PASS",
+    }
+
+    if falsified:
+        report["interpretation"] = (
+            f"Candidate max patch ({round(max_patch_kd, 3)}) exceeds the 95th "
+            f"percentile ({_APR_FALSIFICATION_THRESHOLD}) of clinical-stage "
+            f"therapeutics (z={max_z}, {max_percentile}th percentile). "
+            f"This is a statistically grounded falsification — the design has "
+            f"a hydrophobic patch worse than >95% of successfully manufactured "
+            f"antibodies. Introduce polar substitutions to break the patch."
+        )
+    else:
+        report["interpretation"] = (
+            f"Candidate max patch ({round(max_patch_kd, 3)}) is within the "
+            f"clinical-stage distribution (z={max_z}, {max_percentile}th "
+            f"percentile). No aggregation-prone regions exceed the falsification "
+            f"threshold."
+        )
+
+    result = json.dumps(report, indent=2)
+    logger.info("scan_aggregation_patches | %s", result)
+    return result
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

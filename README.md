@@ -1,12 +1,12 @@
 # VHH-Falsifier: Agentic Sequential Falsification for Nanobody Engineering
 
+![VHH-Falsifier Sequential Falsification Loop](assets/infographic.png)
+
 ## What This Does
 
 An LLM agent designs VHH nanobody sequences, then immediately tries to break them. Deterministic tools scan for manufacturing liabilities (deamidation, aggregation, glycosylation). If anything fails, the agent mutates the design and re-tests. The loop repeats until the candidate passes every check — or the iteration budget runs out.
 
 No design exits the loop unfalsified.
-
-Part of the [Biomni Lab](https://github.com/ChristopherSNelson) ecosystem for agentic drug discovery.
 
 ## The Loop
 
@@ -95,10 +95,49 @@ Hard requirements. Nothing passes unless all are satisfied.
 |---|---|---|
 | Isoelectric point | pI > 7.5 | Avoid precipitation near physiological pH |
 | Hydropathy | GRAVY <= 0.0 | Minimize aggregation propensity |
+| Aggregation-prone regions | Below 95th percentile of CSTs | Clinically-calibrated patch detection |
 | Deamidation motifs | Zero in CDRs | Eliminate shelf-life degradation risk |
 | Isomerization motifs | Zero in CDRs | Prevent charge heterogeneity |
 | N-Glycosylation sequons | Zero in CDRs | Ensure batch consistency |
 | FR2 hallmark tetrad | Assessed and documented | Structural integrity of VHH scaffold |
+
+### Aggregation-Prone Region (APR) Detection
+
+The APR scanner uses a 7-residue sliding window over the Kyte-Doolittle hydrophobicity scale, calibrated against real clinical data rather than arbitrary cutoffs.
+
+Clinical-stage benchmarking: Each window is compared against a pre-computed distribution of max-patch hydrophobicity scores from 13 approved and clinical-stage VH/VHH domains (Caplacizumab, Pembrolizumab, Trastuzumab, Adalimumab, Nivolumab, Rituximab, Bevacizumab, Atezolizumab, Durvalumab, Ipilimumab, Ozoralizumab, Envafolimab, Crizanlizumab).
+
+Statistical falsification: A design is only falsified if its worst hydrophobic patch exceeds the 95th percentile of successful clinical antibodies (threshold: 1.934 mean KD/residue). The tool returns z-scores and percentiles relative to this distribution, plus a direct comparison to Caplacizumab (first approved VHH, max patch = 1.357).
+
+References: Jain et al. (2017) PNAS 114(5):944-949; Raybould et al. (2019) TAP dataset.
+
+## Roadmap: Toward Autonomous Biologics Discovery
+
+VHH-Falsifier is a functional prototype of agentic sequential falsification. Future iterations will transition from sequence-level heuristics to structural physics and state-of-the-art ML.
+
+### 1. Structural Falsification (Spatial Physics)
+
+SASA-aware liabilities: Integrate BioPython PDB or FreeSASA to context-qualify PTM motifs (e.g., NG deamidation). A liability is only falsified if its solvent accessible surface area exceeds 25 A^2, preventing the rejection of stable, buried residues.
+
+Interface delta-G via folding: Invoke ESMFold or AlphaFold-Multimer to calculate binding energy and interface RMSD, moving beyond zero-shot sequence guessing to structural validation of CDR3 loop geometry.
+
+### 2. High-Fidelity Developability (TDC Alignment)
+
+Spatially-resolved aggregation: Upgrade from global GRAVY scores to Spatial Aggregation Propensity (SAP) mapping. This identifies local hydrophobic patches specifically on the solvent-exposed surface of the VHH, aligning with Therapeutics Data Commons (TDC) benchmarks like TAP.
+
+Inverse folding: Replace stochastic mutation with a ProteinMPNN or IgDesign layer to generate sequence manifolds pre-optimized for the target scaffold's 3D coordinates.
+
+### 3. Next-Gen Immunogenicity Falsification
+
+Presentation-aware screening: Move beyond legacy NetMHCpan to BigMHC, a deep learning ensemble that predicts peptide presentation on the cell surface (mass spec ground truth) rather than just binding affinity.
+
+OAS-perplexity scoring: Use ESM-2 to calculate the naturalness (log-likelihood) of the VHH sequence relative to the Observed Antibody Space (OAS). Any design with high perplexity (statistical deviation from human germline distributions) is falsified as a high immunogenicity risk.
+
+### 4. Complex Search and Optimization
+
+Monte Carlo Tree Search (MCTS): Transition from a linear loop to an MCTS-based mutation strategy, allowing the agent to explore multiple parallel mutation branches and prune those that fail early developability checks.
+
+Multi-agent red teaming: Implement a Generator vs. Falsifier adversarial debate, where the Generator is incentivized to find exploits in the Falsifier's deterministic rules, driving higher scaffold robustness.
 
 ## License
 

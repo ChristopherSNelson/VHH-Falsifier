@@ -41,6 +41,7 @@ from openai import OpenAI
 # ---------------------------------------------------------------------------
 from biologics_server import (
     calculate_biophysical_profile,
+    scan_aggregation_patches,
     scan_structural_liabilities,
     vhh_hallmark_audit,
 )
@@ -170,6 +171,34 @@ TOOLS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "scan_aggregation_patches",
+            "description": (
+                "Scan for aggregation-prone regions (APRs) using clinically-"
+                "calibrated sliding-window hydrophobicity. Each 7-residue "
+                "window is scored against a reference distribution of 13 "
+                "clinical-stage VH/VHH domains. Returns z-scores, percentiles, "
+                "Caplacizumab comparison, and PASS/FAIL against the 95th "
+                "percentile falsification threshold."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sequence": {
+                        "type": "string",
+                        "description": "Single-letter amino-acid sequence.",
+                    },
+                    "window_size": {
+                        "type": "integer",
+                        "description": "Sliding window width (default 7).",
+                    },
+                },
+                "required": ["sequence"],
+            },
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -184,6 +213,9 @@ TOOL_DISPATCH: dict[str, callable] = {
     ),
     "vhh_hallmark_audit": lambda args: vhh_hallmark_audit(
         args["sequence"], args.get("framework2_start", 36)
+    ),
+    "scan_aggregation_patches": lambda args: scan_aggregation_patches(
+        args["sequence"], args.get("window_size", 7)
     ),
 }
 
@@ -215,11 +247,13 @@ You operate under a strict Popperian falsification framework:
 loop must be designed to mimic the Pembrolizumab heavy-chain CDR3 binding \
 geometry against the PD-1 CC' loop / FG loop epitope.
 
-2. **Falsify**: IMMEDIATELY call ALL THREE tools on your proposed sequence:
+2. **Falsify**: IMMEDIATELY call ALL FOUR tools on your proposed sequence:
    - `vhh_hallmark_audit` — check FR2 hallmark tetrad (positions 37/44/45/47)
    - `scan_structural_liabilities` — check for deamidation (NG/NS/NA), \
 isomerization (DG), N-glycosylation (N-X-S/T)
    - `calculate_biophysical_profile` — check pI and GRAVY
+   - `scan_aggregation_patches` — sliding-window hydrophobicity scan for \
+aggregation-prone regions (sticky patches of 5-7 hydrophobic residues)
 
 3. **Critique**: Analyze every FAIL flag. For each liability found:
    - State the exact motif and position
@@ -230,7 +264,7 @@ at position X creates a clinical manufacturing risk (asparagine deamidation \
 via succinimide intermediate). I am mutating N→Q (or G→A) to eliminate the \
 NG sequon."
 
-4. **Mutate & Re-test**: Apply the mutations and re-run ALL THREE tools on the \
+4. **Mutate & Re-test**: Apply the mutations and re-run ALL FOUR tools on the \
 revised sequence. Repeat until all tools return PASS/Low risk.
 
 5. **Final Report**: Once the design passes all checks, present the final \
@@ -239,6 +273,7 @@ sequence with a summary of all mutations made and the rationale for each.
 ## Developability Constraints (hard requirements)
 - pI > 7.5 (avoid precipitation near physiological pH)
 - GRAVY ≤ 0.0 (hydrophilic surface → lower aggregation)
+- No aggregation-prone patches exceeding the 95th percentile of clinical-stage therapeutics
 - Zero deamidation motifs (NG, NS, NA) in CDRs
 - Zero isomerization motifs (DG) in CDRs
 - Zero N-glycosylation sequons (N-X-S/T, X≠Pro) in CDRs
