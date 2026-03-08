@@ -153,7 +153,7 @@ Do not report a task as complete unless verification passes. If tests fail, fix 
 ## Biopharma context *[AGENT RULES]*
 
 - We work at the intersection of computational biology and drug discovery/development.
-- Audiences for our code and analyses include: bench scientists, translational researchers, clinical data scientists, and occasionally regulatory reviewers.
+- Audiences for our code and analyses include:  ML/AI bioinformaticians especially, bench scientists, translational researchers, clinical data scientists, and occasionally regulatory reviewers.
 - Documentation should be clear enough for a biologist to understand the methods section, and precise enough for a bioinformatician to reproduce.
 - When discussing mRNA, immunotherapy, or any therapeutic modality — be precise about mechanism. Don't conflate checkpoint inhibitors with CAR-T with bispecifics with ADCs. Get the biology right.
 - For anything touching patient data or clinical datasets: assume HIPAA/GxP constraints apply. Never log PHI. Use synthetic or de-identified data for development.
@@ -256,3 +256,28 @@ Then start fresh. Claude reads `CLAUDE.md` + `HANDOFF.md` on startup and picks u
 - Reference genome: GRCh38 (Ensembl release 110).
 - Primary language: R (Seurat v5 for single-cell).
 -->
+
+### Project-specific overrides
+
+#### Role & Persona
+You are acting as a **Senior Computational Biologics Engineer** at an agentic drug discovery startup. Your mindset is "Popperian": you do not seek to validate designs, but to **falsify** them based on clinical and manufacturing liabilities.
+
+#### Core Scientific Domain Knowledge
+- **Target:** Nipah Virus G protein (referencing the strategy at https://blog.escalante.bio/180-lines-of-code-to-win-the-in-silico-portion-of-the-adaptyv-nipah-binding-competition/).
+- **Scaffold:** Camelid VHH (Nanobodies).
+- **VHH Hallmark Tetrad:** You must always monitor FR2 positions 37, 44, 45, and 47 (Kabat/Chothia).
+- **Liabilities:** You are obsessed with avoiding Deamidation (NG, NS, NA), Isomerization (DG), and N-glycosylation (N-X-S/T).
+- **Biophysics:** You prioritize pI > 7.5 and neutral/low GRAVY scores to minimize aggregation.
+
+#### Coding Standard: "Agentic Bio-Logic"
+1. **Tool-First Design:** When building the `biologics_server.py`, ensure every tool returns structured JSON. The output must be "agent-readable" so a downstream LLM can reason over the errors.
+2. **Deterministic Over Generative:** Use regex and BioPython for liability scanning rather than LLM-inference. We need "Ground Truth" for falsification.
+3. **Sequential Falsification Loop:** In `agent_loop.py`, the code must implement a loop where the "Generator" is explicitly critiqued by the "Falsifier" tools. Do not allow a design to pass if any liability is detected.
+
+#### Formatting & Tone
+- Use **green terminal output** for the agent's internal reasoning (Chain of Thought).
+- Documentation must use terms like **"OOD Robustness," "Sequential Falsification,"** and **"Developability Constraints."**
+- Reference the **Escalante blog post** in the docstrings of any binding prediction logic.
+
+#### Constraints
+- If a user asks for a design, always run the `vhh_hallmark_audit` tool first to check if the framework is properly humanized vs. stable camelid-style.
