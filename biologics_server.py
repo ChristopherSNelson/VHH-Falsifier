@@ -162,11 +162,18 @@ def scan_structural_liabilities(sequence: str) -> str:
 
     for name, pattern, mechanism in _COMPILED_LIABILITIES:
         for match in pattern.finditer(seq):
+            # Show surrounding context so LLMs can locate the motif visually
+            start = match.start()
+            ctx_left = seq[max(0, start - 5) : start]
+            ctx_right = seq[match.end() : match.end() + 5]
+            context = f"...{ctx_left}[{match.group()}]{ctx_right}..."
+
             liabilities.append(
                 {
                     "liability_type": name,
                     "motif": match.group(),
                     "position": match.start() + 1,  # 1-based for biologists
+                    "context": context,
                     "mechanism": mechanism,
                 }
             )
