@@ -28,10 +28,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 from openai import OpenAI
 
 # ---------------------------------------------------------------------------
@@ -253,6 +255,133 @@ identify a liability, be specific about position, motif, mechanism, and fix.
 MAX_ITERATIONS = 10  # Safety cap to prevent runaway loops
 
 
+PLOT_DIR = Path(__file__).parent / "assets"
+
+
+def _plot_biophysical_trajectory(
+    points: list[dict[str, float | int]],
+) -> Path:
+    """Generate a pI vs. GRAVY scatter plot showing optimization trajectory.
+
+    Early iterations in red, final iteration in green, with the
+    developability safe zone shaded.
+    """
+    PLOT_DIR.mkdir(exist_ok=True)
+    out_path = PLOT_DIR / "biophysical_trajectory.png"
+
+    pis = [p["pI"] for p in points]
+    gravys = [p["gravy"] for p in points]
+    iters = [p["iteration"] for p in points]
+
+    fig, ax = plt.subplots(figsize=(8, 6), facecolor="#0a0a0a")
+    ax.set_facecolor("#0a0a0a")
+
+    # Safe zone: pI > 7.5 and GRAVY <= 0.0
+    ax.axhspan(-0.8, 0.0, xmin=0, xmax=1, alpha=0.12, color="#00ff41", zorder=0)
+    ax.axhline(0.0, color="#00ff41", linewidth=0.8, linestyle="--", alpha=0.5)
+    ax.axvline(7.5, color="#00ff41", linewidth=0.8, linestyle="--", alpha=0.5)
+
+    # Label the safe zone
+    ax.text(
+        max(max(pis), 8.5) + 0.1,
+        -0.4,
+        "SAFE\nZONE",
+        color="#00ff41",
+        fontsize=9,
+        alpha=0.4,
+        ha="left",
+        va="center",
+        fontfamily="monospace",
+    )
+
+    # Draw trajectory line connecting points in iteration order
+    ax.plot(pis, gravys, color="#444444", linewidth=1, zorder=1)
+
+    # Color: first point red, last point green, middle points gradient
+    n = len(points)
+    for i, (pi, gravy, it) in enumerate(zip(pis, gravys, iters)):
+        if i == 0:
+            color = "#ff3333"
+            label = f"Iter {it} (initial)"
+            size = 80
+        elif i == n - 1:
+            color = "#00ff41"
+            label = f"Iter {it} (final)"
+            size = 100
+        else:
+            # Gradient from red to yellow to green
+            frac = i / (n - 1)
+            color = plt.cm.RdYlGn(frac)
+            label = f"Iter {it}"
+            size = 50
+
+        ax.scatter(
+            pi,
+            gravy,
+            c=[color],
+            s=size,
+            zorder=2,
+            edgecolors="white",
+            linewidths=0.5,
+            label=label,
+        )
+
+    ax.set_xlabel(
+        "Isoelectric Point (pI)", color="white", fontsize=11, fontfamily="monospace"
+    )
+    ax.set_ylabel("GRAVY Score", color="white", fontsize=11, fontfamily="monospace")
+    ax.set_title(
+        "VHH-Falsifier: Biophysical Optimization Trajectory",
+        color="white",
+        fontsize=13,
+        fontfamily="monospace",
+        pad=15,
+    )
+
+    # Style axes
+    ax.tick_params(colors="white", labelsize=9)
+    for spine in ax.spines.values():
+        spine.set_color("#333333")
+
+    # Threshold annotations
+    ax.annotate(
+        "pI = 7.5",
+        xy=(7.5, ax.get_ylim()[1]),
+        fontsize=8,
+        color="#00ff41",
+        alpha=0.6,
+        fontfamily="monospace",
+        ha="center",
+        va="bottom",
+    )
+    ax.annotate(
+        "GRAVY = 0.0",
+        xy=(ax.get_xlim()[0], 0.0),
+        fontsize=8,
+        color="#00ff41",
+        alpha=0.6,
+        fontfamily="monospace",
+        ha="left",
+        va="bottom",
+    )
+
+    ax.legend(
+        loc="upper left",
+        fontsize=8,
+        facecolor="#1a1a1a",
+        edgecolor="#333333",
+        labelcolor="white",
+    )
+
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150, facecolor="#0a0a0a")
+    plt.close(fig)
+
+    subprocess.run(["open", str(out_path)], check=False)
+
+    return out_path
+
+
 def run_falsification_loop() -> None:
     """Run the generate → falsify → critique → mutate loop."""
     api_key = os.environ.get("TOGETHER_API_KEY")
@@ -294,6 +423,9 @@ def run_falsification_loop() -> None:
     # Cost tracking
     total_input_tokens = 0
     total_output_tokens = 0
+
+    # Biophysical trajectory tracking for scatter plot
+    biophysical_points: list[dict[str, float | int]] = []
 
     iteration = 0
     for iteration in range(1, MAX_ITERATIONS + 1):
@@ -363,6 +495,19 @@ def run_falsification_loop() -> None:
             cot_print(f"[Tool Result] {fn_name}:")
             cot_print(f"  {json.dumps(result_data, indent=2)[:500]}")
 
+            # Capture pI/GRAVY for trajectory plot
+            if (
+                fn_name == "calculate_biophysical_profile"
+                and "error" not in result_data
+            ):
+                biophysical_points.append(
+                    {
+                        "iteration": iteration,
+                        "pI": result_data["isoelectric_point"],
+                        "gravy": result_data["gravy"],
+                    }
+                )
+
             messages.append(
                 {
                     "role": "tool",
@@ -386,6 +531,15 @@ def run_falsification_loop() -> None:
     cot_print(f"Input tokens:  {total_input_tokens:,}")
     cot_print(f"Output tokens: {total_output_tokens:,}")
     cot_print(f"Total cost:    ${final_cost:.4f}")
+
+    # Generate biophysical trajectory plot
+    if len(biophysical_points) >= 2:
+        plot_path = _plot_biophysical_trajectory(biophysical_points)
+        cot_print(f"Biophysical trajectory plot saved: {plot_path}")
+    elif biophysical_points:
+        cot_print("Only one biophysical data point — skipping plot.")
+    else:
+        cot_print("No biophysical data captured — skipping plot.")
 
     # Write session summary to log
     cot_print(f"\nSession ended: {datetime.now(timezone.utc).isoformat()}")
