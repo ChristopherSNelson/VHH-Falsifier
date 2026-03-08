@@ -285,6 +285,24 @@ identify a liability, be specific about position, motif, mechanism, and fix.
 """
 
 # ---------------------------------------------------------------------------
+# Seed sequences for different starting points
+# ---------------------------------------------------------------------------
+
+# Option 1: Deliberately bad naive VHH — 7 liabilities, low pI, APR 100th %ile,
+# fully humanized FR2. Maximises the red→green arc in the dashboard.
+NAIVE_SEED = (
+    "EVQLVESGGGLVQPGGSLRLSCAASGFTFSNGYMSNGWVRQAPGKGLEWVSDGISNGGS"
+    "TYYADSVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYCAAILVCFFDGYWGQGTLVTVSS"
+)
+
+# Option 2: Pembrolizumab heavy chain VH (PDB 5DK3) — real clinical sequence,
+# 1 liability (NG), good pI, but fully humanized FR2 (needs camelid conversion).
+PEMBROLIZUMAB_VH_SEED = (
+    "QVQLVQSGVEVKKPGASVKVSCKASGYTFTNYYMYWVRQAPGQGLEWMGGINPSNGGTN"
+    "FNEKFKNRVTLTTDSSTTTAYMELKSLQFDDTAVYYCARRDYRFDMGFDYWGQGTTVTVSS"
+)
+
+# ---------------------------------------------------------------------------
 # Main falsification loop
 # ---------------------------------------------------------------------------
 MAX_ITERATIONS = 10  # Safety cap to prevent runaway loops
@@ -295,6 +313,7 @@ PLOT_DIR = Path(__file__).parent / "assets"
 
 def _plot_biophysical_trajectory(
     points: list[dict],
+    plot_name: str = "biophysical_trajectory",
 ) -> Path:
     """Generate a multi-panel developability dashboard.
 
@@ -305,7 +324,7 @@ def _plot_biophysical_trajectory(
       4. APR percentile — worst hydrophobic patch vs. clinical distribution
     """
     PLOT_DIR.mkdir(exist_ok=True)
-    out_path = PLOT_DIR / "biophysical_trajectory.png"
+    out_path = PLOT_DIR / f"{plot_name}.png"
 
     def _is_imputed(point: dict, key: str) -> bool:
         return key in point.get("_imputed", set())
@@ -540,8 +559,17 @@ def _plot_biophysical_trajectory(
     return out_path
 
 
-def run_falsification_loop() -> None:
-    """Run the generate → falsify → critique → mutate loop."""
+def run_falsification_loop(
+    seed_sequence: str | None = None,
+    plot_name: str = "biophysical_trajectory",
+) -> None:
+    """Run the generate → falsify → critique → mutate loop.
+
+    Args:
+        seed_sequence: Optional starting sequence. If provided, the agent is
+            asked to optimize it rather than designing from scratch.
+        plot_name: Base name for the dashboard PNG (without extension).
+    """
     api_key = os.environ.get("TOGETHER_API_KEY")
     if not api_key:
         print(
@@ -555,27 +583,39 @@ def run_falsification_loop() -> None:
 
     client = OpenAI(api_key=api_key, base_url=BASE_URL)
 
-    header_print("VHH-Falsifier — Sequential Falsification Loop")
+    seed_label = "from seed" if seed_sequence else "zero-shot"
+    header_print(f"VHH-Falsifier — Sequential Falsification Loop ({seed_label})")
     cot_print(f"Session started: {datetime.now(timezone.utc).isoformat()}")
     cot_print("Target: Human PD-1 (Pembrolizumab epitope)")
     cot_print("Scaffold: Camelid VHH nanobody")
     cot_print(f"Provider: Together AI ({BASE_URL})")
     cot_print(f"Model: {model_id}")
     cot_print(f"Max iterations: {MAX_ITERATIONS}")
+    if seed_sequence:
+        cot_print(f"Seed sequence: {seed_sequence[:40]}...")
     cot_print(f"CoT log: {COT_LOG.resolve()}\n")
+
+    # Build user prompt — seeded or zero-shot
+    if seed_sequence:
+        user_prompt = (
+            f"Optimize the following seed VHH sequence for targeting Human PD-1 "
+            f"at the Pembrolizumab epitope. This sequence has known developability "
+            f"issues. Follow the sequential falsification protocol exactly: first "
+            f"run all four tools on this seed, then critique and mutate.\n\n"
+            f"Seed sequence:\n{seed_sequence}"
+        )
+    else:
+        user_prompt = (
+            "Design a VHH nanobody targeting Human PD-1 at the "
+            "Pembrolizumab epitope. Follow the sequential falsification "
+            "protocol exactly. Begin by proposing your first candidate "
+            "sequence, then immediately falsify it with all four tools."
+        )
 
     # Initial user message kicks off the loop
     messages: list[dict] = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": (
-                "Design a VHH nanobody targeting Human PD-1 at the "
-                "Pembrolizumab epitope. Follow the sequential falsification "
-                "protocol exactly. Begin by proposing your first candidate "
-                "sequence, then immediately falsify it with all four tools."
-            ),
-        },
+        {"role": "user", "content": user_prompt},
     ]
 
     # Cost tracking
@@ -584,6 +624,20 @@ def run_falsification_loop() -> None:
 
     # Per-iteration tracking for dashboard plot
     iteration_metrics: dict[int, dict] = {}  # iteration -> merged metrics
+
+    # Capture iteration-0 baseline if a seed was provided
+    if seed_sequence:
+        bp = json.loads(calculate_biophysical_profile(seed_sequence))
+        sl = json.loads(scan_structural_liabilities(seed_sequence))
+        ap = json.loads(scan_aggregation_patches(seed_sequence))
+        iteration_metrics[0] = {
+            "iteration": 0,
+            "pI": bp.get("isoelectric_point", 0),
+            "gravy": bp.get("gravy", 0),
+            "liability_count": sl.get("liability_count", 0),
+            "apr_percentile": ap.get("candidate_max_patch", {}).get("percentile", 0),
+        }
+        cot_print("[Baseline] Seed sequence profiled as iteration 0")
 
     iteration = 0
     for iteration in range(1, MAX_ITERATIONS + 1):
@@ -748,7 +802,7 @@ def run_falsification_loop() -> None:
                     dashboard_points[i].setdefault("_imputed", set()).add(key)
 
     if len(dashboard_points) >= 2:
-        plot_path = _plot_biophysical_trajectory(dashboard_points)
+        plot_path = _plot_biophysical_trajectory(dashboard_points, plot_name)
         cot_print(f"Developability dashboard saved: {plot_path}")
     elif dashboard_points:
         cot_print("Only one iteration with data — skipping dashboard.")
@@ -762,4 +816,28 @@ def run_falsification_loop() -> None:
 
 
 if __name__ == "__main__":
-    run_falsification_loop()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="VHH-Falsifier agent loop")
+    parser.add_argument(
+        "--seed",
+        choices=["naive", "pembrolizumab", "none"],
+        default="naive",
+        help="Seed sequence: 'naive' (deliberately bad), 'pembrolizumab' (real VH), 'none' (zero-shot)",
+    )
+    parser.add_argument(
+        "--plot-name",
+        default="biophysical_trajectory",
+        help="Base name for the dashboard PNG",
+    )
+    args = parser.parse_args()
+
+    seed_map = {
+        "naive": NAIVE_SEED,
+        "pembrolizumab": PEMBROLIZUMAB_VH_SEED,
+        "none": None,
+    }
+    run_falsification_loop(
+        seed_sequence=seed_map[args.seed],
+        plot_name=args.plot_name,
+    )
