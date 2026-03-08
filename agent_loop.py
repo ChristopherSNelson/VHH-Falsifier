@@ -294,121 +294,237 @@ PLOT_DIR = Path(__file__).parent / "assets"
 
 
 def _plot_biophysical_trajectory(
-    points: list[dict[str, float | int]],
+    points: list[dict],
 ) -> Path:
-    """Generate a pI vs. GRAVY scatter plot showing optimization trajectory.
+    """Generate a multi-panel developability dashboard.
 
-    Early iterations in red, final iteration in green, with the
-    developability safe zone shaded.
+    Four panels track the optimization trajectory across iterations:
+      1. pI — isoelectric point with pass/fail threshold
+      2. GRAVY — hydropathy with pass/fail threshold
+      3. Liability count — PTM hotspots per iteration
+      4. APR percentile — worst hydrophobic patch vs. clinical distribution
     """
     PLOT_DIR.mkdir(exist_ok=True)
     out_path = PLOT_DIR / "biophysical_trajectory.png"
 
-    pis = [p["pI"] for p in points]
-    gravys = [p["gravy"] for p in points]
     iters = [p["iteration"] for p in points]
 
-    fig, ax = plt.subplots(figsize=(8, 6), facecolor="#0a0a0a")
-    ax.set_facecolor("#0a0a0a")
-
-    # Safe zone: pI > 7.5 and GRAVY <= 0.0
-    ax.axhspan(-0.8, 0.0, xmin=0, xmax=1, alpha=0.12, color="#00ff41", zorder=0)
-    ax.axhline(0.0, color="#00ff41", linewidth=0.8, linestyle="--", alpha=0.5)
-    ax.axvline(7.5, color="#00ff41", linewidth=0.8, linestyle="--", alpha=0.5)
-
-    # Label the safe zone
-    ax.text(
-        max(max(pis), 8.5) + 0.1,
-        -0.4,
-        "SAFE\nZONE",
-        color="#00ff41",
-        fontsize=9,
-        alpha=0.4,
-        ha="left",
-        va="center",
-        fontfamily="monospace",
-    )
-
-    # Draw trajectory line connecting points in iteration order
-    ax.plot(pis, gravys, color="#444444", linewidth=1, zorder=1)
-
-    # Color: first point red, last point green, middle points gradient
-    n = len(points)
-    for i, (pi, gravy, it) in enumerate(zip(pis, gravys, iters)):
-        if i == 0:
-            color = "#ff3333"
-            label = f"Iter {it} (initial)"
-            size = 80
-        elif i == n - 1:
-            color = "#00ff41"
-            label = f"Iter {it} (final)"
-            size = 100
-        else:
-            # Gradient from red to yellow to green
-            frac = i / (n - 1)
-            color = plt.cm.RdYlGn(frac)
-            label = f"Iter {it}"
-            size = 50
-
-        ax.scatter(
-            pi,
-            gravy,
-            c=[color],
-            s=size,
-            zorder=2,
-            edgecolors="white",
-            linewidths=0.5,
-            label=label,
-        )
-
-    ax.set_xlabel(
-        "Isoelectric Point (pI)", color="white", fontsize=11, fontfamily="monospace"
-    )
-    ax.set_ylabel("GRAVY Score", color="white", fontsize=11, fontfamily="monospace")
-    ax.set_title(
-        "VHH-Falsifier: Biophysical Optimization Trajectory",
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8), facecolor="#0a0a0a")
+    fig.suptitle(
+        "VHH-Falsifier: Developability Optimization Dashboard",
         color="white",
-        fontsize=13,
+        fontsize=14,
         fontfamily="monospace",
-        pad=15,
+        y=0.97,
     )
 
-    # Style axes
-    ax.tick_params(colors="white", labelsize=9)
-    for spine in ax.spines.values():
-        spine.set_color("#333333")
+    for ax in axes.flat:
+        ax.set_facecolor("#0a0a0a")
+        ax.tick_params(colors="white", labelsize=8)
+        for spine in ax.spines.values():
+            spine.set_color("#333333")
+        ax.set_xlabel("Iteration", color="white", fontsize=9, fontfamily="monospace")
 
-    # Threshold annotations
-    ax.annotate(
-        "pI = 7.5",
-        xy=(7.5, ax.get_ylim()[1]),
-        fontsize=8,
+    # --- Panel 1: pI trajectory ---
+    ax1 = axes[0, 0]
+    pis = [p.get("pI", 0) for p in points]
+    colors_pi = ["#00ff41" if pi > 7.5 else "#ff3333" for pi in pis]
+    ax1.axhline(7.5, color="#00ff41", linewidth=1, linestyle="--", alpha=0.4)
+    ax1.axhspan(0, 7.5, alpha=0.06, color="#ff3333", zorder=0)
+    ax1.axhspan(7.5, max(max(pis) + 0.5, 10), alpha=0.06, color="#00ff41", zorder=0)
+    ax1.plot(iters, pis, color="#555555", linewidth=1.5, zorder=1)
+    ax1.scatter(
+        iters, pis, c=colors_pi, s=70, zorder=2, edgecolors="white", linewidths=0.8
+    )
+    for i, (it, pi) in enumerate(zip(iters, pis)):
+        ax1.annotate(
+            f"{pi:.1f}",
+            (it, pi),
+            textcoords="offset points",
+            xytext=(0, 10),
+            ha="center",
+            fontsize=8,
+            color="white",
+            fontfamily="monospace",
+        )
+    ax1.set_ylabel(
+        "Isoelectric Point (pI)", color="white", fontsize=9, fontfamily="monospace"
+    )
+    ax1.set_title(
+        "pI (threshold: 7.5)", color="white", fontsize=10, fontfamily="monospace"
+    )
+    ax1.text(
+        max(iters),
+        7.5,
+        " PASS",
         color="#00ff41",
-        alpha=0.6,
-        fontfamily="monospace",
-        ha="center",
+        fontsize=7,
         va="bottom",
+        fontfamily="monospace",
+        alpha=0.6,
     )
-    ax.annotate(
-        "GRAVY = 0.0",
-        xy=(ax.get_xlim()[0], 0.0),
-        fontsize=8,
+    ax1.text(
+        max(iters),
+        7.5,
+        " FAIL",
+        color="#ff3333",
+        fontsize=7,
+        va="top",
+        fontfamily="monospace",
+        alpha=0.6,
+    )
+
+    # --- Panel 2: GRAVY trajectory ---
+    ax2 = axes[0, 1]
+    gravys = [p.get("gravy", 0) for p in points]
+    colors_gv = ["#00ff41" if g <= 0.0 else "#ff3333" for g in gravys]
+    ax2.axhline(0.0, color="#00ff41", linewidth=1, linestyle="--", alpha=0.4)
+    ax2.axhspan(
+        min(min(gravys) - 0.05, -0.3), 0.0, alpha=0.06, color="#00ff41", zorder=0
+    )
+    ax2.axhspan(
+        0.0, max(max(gravys) + 0.05, 0.1), alpha=0.06, color="#ff3333", zorder=0
+    )
+    ax2.plot(iters, gravys, color="#555555", linewidth=1.5, zorder=1)
+    ax2.scatter(
+        iters, gravys, c=colors_gv, s=70, zorder=2, edgecolors="white", linewidths=0.8
+    )
+    for it, gv in zip(iters, gravys):
+        ax2.annotate(
+            f"{gv:.3f}",
+            (it, gv),
+            textcoords="offset points",
+            xytext=(0, 10),
+            ha="center",
+            fontsize=8,
+            color="white",
+            fontfamily="monospace",
+        )
+    ax2.set_ylabel("GRAVY Score", color="white", fontsize=9, fontfamily="monospace")
+    ax2.set_title(
+        "GRAVY (threshold: 0.0)", color="white", fontsize=10, fontfamily="monospace"
+    )
+    ax2.text(
+        max(iters),
+        0.0,
+        " FAIL",
+        color="#ff3333",
+        fontsize=7,
+        va="bottom",
+        fontfamily="monospace",
+        alpha=0.6,
+    )
+    ax2.text(
+        max(iters),
+        0.0,
+        " PASS",
         color="#00ff41",
-        alpha=0.6,
+        fontsize=7,
+        va="top",
         fontfamily="monospace",
-        ha="left",
+        alpha=0.6,
+    )
+
+    # --- Panel 3: Liability count ---
+    ax3 = axes[1, 0]
+    liabs = [p.get("liability_count", 0) for p in points]
+    colors_li = ["#00ff41" if lc == 0 else "#ff3333" for lc in liabs]
+    ax3.axhline(0, color="#00ff41", linewidth=1, linestyle="--", alpha=0.4)
+    ax3.bar(
+        iters,
+        liabs,
+        color=colors_li,
+        width=0.6,
+        edgecolor="white",
+        linewidth=0.5,
+        alpha=0.85,
+        zorder=2,
+    )
+    for it, lc in zip(iters, liabs):
+        ax3.annotate(
+            str(lc),
+            (it, lc),
+            textcoords="offset points",
+            xytext=(0, 6),
+            ha="center",
+            fontsize=9,
+            color="white",
+            fontfamily="monospace",
+            fontweight="bold",
+        )
+    ax3.set_ylabel("Liability Count", color="white", fontsize=9, fontfamily="monospace")
+    ax3.set_title(
+        "PTM Liabilities (target: 0)",
+        color="white",
+        fontsize=10,
+        fontfamily="monospace",
+    )
+    ax3.set_ylim(bottom=-0.2)
+
+    # --- Panel 4: APR percentile ---
+    ax4 = axes[1, 1]
+    apr_pcts = [p.get("apr_percentile", 0) for p in points]
+    colors_apr = ["#00ff41" if pct < 95 else "#ff3333" for pct in apr_pcts]
+    ax4.axhline(95, color="#ff3333", linewidth=1, linestyle="--", alpha=0.4)
+    ax4.axhline(40.5, color="#00aaff", linewidth=1, linestyle=":", alpha=0.3)
+    ax4.axhspan(95, 100, alpha=0.06, color="#ff3333", zorder=0)
+    ax4.plot(iters, apr_pcts, color="#555555", linewidth=1.5, zorder=1)
+    ax4.scatter(
+        iters,
+        apr_pcts,
+        c=colors_apr,
+        s=70,
+        zorder=2,
+        edgecolors="white",
+        linewidths=0.8,
+    )
+    for it, pct in zip(iters, apr_pcts):
+        ax4.annotate(
+            f"{pct:.0f}%",
+            (it, pct),
+            textcoords="offset points",
+            xytext=(0, 10),
+            ha="center",
+            fontsize=8,
+            color="white",
+            fontfamily="monospace",
+        )
+    ax4.set_ylabel(
+        "Percentile vs CSTs", color="white", fontsize=9, fontfamily="monospace"
+    )
+    ax4.set_title(
+        "APR Patch (falsification: 95th %ile)",
+        color="white",
+        fontsize=10,
+        fontfamily="monospace",
+    )
+    ax4.set_ylim(0, 105)
+    ax4.text(
+        max(iters),
+        95,
+        " FAIL",
+        color="#ff3333",
+        fontsize=7,
         va="bottom",
+        fontfamily="monospace",
+        alpha=0.6,
+    )
+    ax4.text(
+        max(iters),
+        40.5,
+        " Caplacizumab",
+        color="#00aaff",
+        fontsize=7,
+        va="bottom",
+        fontfamily="monospace",
+        alpha=0.5,
     )
 
-    ax.legend(
-        loc="upper left",
-        fontsize=8,
-        facecolor="#1a1a1a",
-        edgecolor="#333333",
-        labelcolor="white",
-    )
+    # Integer x-ticks
+    for ax in axes.flat:
+        ax.set_xticks(iters)
 
-    fig.tight_layout()
+    fig.tight_layout(rect=[0, 0, 1, 0.94])
     fig.savefig(out_path, dpi=150, facecolor="#0a0a0a")
     plt.close(fig)
 
@@ -459,8 +575,8 @@ def run_falsification_loop() -> None:
     total_input_tokens = 0
     total_output_tokens = 0
 
-    # Biophysical trajectory tracking for scatter plot
-    biophysical_points: list[dict[str, float | int]] = []
+    # Per-iteration tracking for dashboard plot
+    iteration_metrics: dict[int, dict] = {}  # iteration -> merged metrics
 
     iteration = 0
     for iteration in range(1, MAX_ITERATIONS + 1):
@@ -530,18 +646,21 @@ def run_falsification_loop() -> None:
             cot_print(f"[Tool Result] {fn_name}:")
             cot_print(f"  {json.dumps(result_data, indent=2)[:500]}")
 
-            # Capture pI/GRAVY for trajectory plot
-            if (
-                fn_name == "calculate_biophysical_profile"
-                and "error" not in result_data
-            ):
-                biophysical_points.append(
-                    {
-                        "iteration": iteration,
-                        "pI": result_data["isoelectric_point"],
-                        "gravy": result_data["gravy"],
-                    }
-                )
+            # Capture metrics for dashboard plot
+            if "error" not in result_data:
+                if iteration not in iteration_metrics:
+                    iteration_metrics[iteration] = {"iteration": iteration}
+                m = iteration_metrics[iteration]
+
+                if fn_name == "calculate_biophysical_profile":
+                    m["pI"] = result_data["isoelectric_point"]
+                    m["gravy"] = result_data["gravy"]
+                elif fn_name == "scan_structural_liabilities":
+                    m["liability_count"] = result_data["liability_count"]
+                elif fn_name == "scan_aggregation_patches":
+                    m["apr_percentile"] = result_data["candidate_max_patch"][
+                        "percentile"
+                    ]
 
             messages.append(
                 {
@@ -567,14 +686,15 @@ def run_falsification_loop() -> None:
     cot_print(f"Output tokens: {total_output_tokens:,}")
     cot_print(f"Total cost:    ${final_cost:.4f}")
 
-    # Generate biophysical trajectory plot
-    if len(biophysical_points) >= 2:
-        plot_path = _plot_biophysical_trajectory(biophysical_points)
-        cot_print(f"Biophysical trajectory plot saved: {plot_path}")
-    elif biophysical_points:
-        cot_print("Only one biophysical data point — skipping plot.")
+    # Generate developability dashboard
+    dashboard_points = sorted(iteration_metrics.values(), key=lambda x: x["iteration"])
+    if len(dashboard_points) >= 2:
+        plot_path = _plot_biophysical_trajectory(dashboard_points)
+        cot_print(f"Developability dashboard saved: {plot_path}")
+    elif dashboard_points:
+        cot_print("Only one iteration with data — skipping dashboard.")
     else:
-        cot_print("No biophysical data captured — skipping plot.")
+        cot_print("No metric data captured — skipping dashboard.")
 
     # Write session summary to log
     cot_print(f"\nSession ended: {datetime.now(timezone.utc).isoformat()}")
