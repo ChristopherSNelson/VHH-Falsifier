@@ -30,7 +30,7 @@ import logging
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -68,9 +68,7 @@ cot_logger = logging.getLogger("agent-cot")
 cot_logger.setLevel(logging.DEBUG)
 
 _file_handler = logging.FileHandler(COT_LOG)
-_file_handler.setFormatter(
-    logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
-)
+_file_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
 cot_logger.addHandler(_file_handler)
 
 # ANSI green for terminal CoT
@@ -205,12 +203,8 @@ TOOLS: list[dict] = [
 # Local tool dispatcher — calls the deterministic functions directly
 # ---------------------------------------------------------------------------
 TOOL_DISPATCH: dict[str, callable] = {
-    "scan_structural_liabilities": lambda args: scan_structural_liabilities(
-        args["sequence"]
-    ),
-    "calculate_biophysical_profile": lambda args: calculate_biophysical_profile(
-        args["sequence"]
-    ),
+    "scan_structural_liabilities": lambda args: scan_structural_liabilities(args["sequence"]),
+    "calculate_biophysical_profile": lambda args: calculate_biophysical_profile(args["sequence"]),
     "vhh_hallmark_audit": lambda args: vhh_hallmark_audit(
         args["sequence"], args.get("framework2_start", 36)
     ),
@@ -355,9 +349,7 @@ def _plot_biophysical_trajectory(
     ax1.axhspan(0, 7.5, alpha=0.06, color="#ff3333", zorder=0)
     ax1.axhspan(7.5, max(max(pis) + 0.5, 10), alpha=0.06, color="#00ff41", zorder=0)
     ax1.plot(iters, pis, color="#555555", linewidth=1.5, zorder=1)
-    ax1.scatter(
-        iters, pis, c=colors_pi, s=70, zorder=2, edgecolors="white", linewidths=0.8
-    )
+    ax1.scatter(iters, pis, c=colors_pi, s=70, zorder=2, edgecolors="white", linewidths=0.8)
     for i, (it, pi) in enumerate(zip(iters, pis)):
         label = "NA" if _is_imputed(points[i], "pI") else f"{pi:.1f}"
         ax1.annotate(
@@ -370,12 +362,8 @@ def _plot_biophysical_trajectory(
             color="#888888" if label == "NA" else "white",
             fontfamily="monospace",
         )
-    ax1.set_ylabel(
-        "Isoelectric Point (pI)", color="white", fontsize=9, fontfamily="monospace"
-    )
-    ax1.set_title(
-        "pI (threshold: 7.5)", color="white", fontsize=10, fontfamily="monospace"
-    )
+    ax1.set_ylabel("Isoelectric Point (pI)", color="white", fontsize=9, fontfamily="monospace")
+    ax1.set_title("pI (threshold: 7.5)", color="white", fontsize=10, fontfamily="monospace")
     ax1.text(
         max(iters),
         7.5,
@@ -402,16 +390,10 @@ def _plot_biophysical_trajectory(
     gravys = [p.get("gravy", 0) for p in points]
     colors_gv = ["#00ff41" if g <= 0.0 else "#ff3333" for g in gravys]
     ax2.axhline(0.0, color="#00ff41", linewidth=1, linestyle="--", alpha=0.4)
-    ax2.axhspan(
-        min(min(gravys) - 0.05, -0.3), 0.0, alpha=0.06, color="#00ff41", zorder=0
-    )
-    ax2.axhspan(
-        0.0, max(max(gravys) + 0.05, 0.1), alpha=0.06, color="#ff3333", zorder=0
-    )
+    ax2.axhspan(min(min(gravys) - 0.05, -0.3), 0.0, alpha=0.06, color="#00ff41", zorder=0)
+    ax2.axhspan(0.0, max(max(gravys) + 0.05, 0.1), alpha=0.06, color="#ff3333", zorder=0)
     ax2.plot(iters, gravys, color="#555555", linewidth=1.5, zorder=1)
-    ax2.scatter(
-        iters, gravys, c=colors_gv, s=70, zorder=2, edgecolors="white", linewidths=0.8
-    )
+    ax2.scatter(iters, gravys, c=colors_gv, s=70, zorder=2, edgecolors="white", linewidths=0.8)
     for i, (it, gv) in enumerate(zip(iters, gravys)):
         label = "NA" if _is_imputed(points[i], "gravy") else f"{gv:.3f}"
         ax2.annotate(
@@ -425,9 +407,7 @@ def _plot_biophysical_trajectory(
             fontfamily="monospace",
         )
     ax2.set_ylabel("GRAVY Score", color="white", fontsize=9, fontfamily="monospace")
-    ax2.set_title(
-        "GRAVY (threshold: 0.0)", color="white", fontsize=10, fontfamily="monospace"
-    )
+    ax2.set_title("GRAVY (threshold: 0.0)", color="white", fontsize=10, fontfamily="monospace")
     ax2.text(
         max(iters),
         0.0,
@@ -515,9 +495,7 @@ def _plot_biophysical_trajectory(
             color="#888888" if label == "NA" else "white",
             fontfamily="monospace",
         )
-    ax4.set_ylabel(
-        "Percentile vs CSTs", color="white", fontsize=9, fontfamily="monospace"
-    )
+    ax4.set_ylabel("Percentile vs CSTs", color="white", fontsize=9, fontfamily="monospace")
     ax4.set_title(
         "APR Patch (threshold: 95th %ile)",
         color="white",
@@ -585,7 +563,7 @@ def run_screening_loop(
 
     seed_label = "from seed" if seed_sequence else "zero-shot"
     header_print(f"VHH-Screener — Developability Screening Loop ({seed_label})")
-    cot_print(f"Session started: {datetime.now(timezone.utc).isoformat()}")
+    cot_print(f"Session started: {datetime.now(UTC).isoformat()}")
     cot_print("Target: Human PD-1 (Pembrolizumab epitope)")
     cot_print("Scaffold: Camelid VHH nanobody")
     cot_print(f"Provider: Together AI ({BASE_URL})")
@@ -663,8 +641,7 @@ def run_screening_loop(
             total_input_tokens += iter_in
             total_output_tokens += iter_out
             iter_cost = (
-                iter_in * PRICE_PER_M_INPUT / 1_000_000
-                + iter_out * PRICE_PER_M_OUTPUT / 1_000_000
+                iter_in * PRICE_PER_M_INPUT / 1_000_000 + iter_out * PRICE_PER_M_OUTPUT / 1_000_000
             )
             running_cost = (
                 total_input_tokens * PRICE_PER_M_INPUT / 1_000_000
@@ -697,9 +674,7 @@ def run_screening_loop(
             fn_name = tool_call.function.name
             fn_args = json.loads(tool_call.function.arguments)
 
-            cot_print(
-                f"\n[Tool Call] {fn_name}({json.dumps(fn_args, indent=None)[:120]}...)"
-            )
+            cot_print(f"\n[Tool Call] {fn_name}({json.dumps(fn_args, indent=None)[:120]}...)")
 
             result_str = execute_tool(fn_name, fn_args)
             result_data = json.loads(result_str)
@@ -719,9 +694,7 @@ def run_screening_loop(
                 elif fn_name == "scan_structural_liabilities":
                     m["liability_count"] = result_data["liability_count"]
                 elif fn_name == "scan_aggregation_patches":
-                    m["apr_percentile"] = result_data["candidate_max_patch"][
-                        "percentile"
-                    ]
+                    m["apr_percentile"] = result_data["candidate_max_patch"]["percentile"]
 
             messages.append(
                 {
@@ -810,7 +783,7 @@ def run_screening_loop(
         cot_print("No metric data captured — skipping dashboard.")
 
     # Write session summary to log
-    cot_print(f"\nSession ended: {datetime.now(timezone.utc).isoformat()}")
+    cot_print(f"\nSession ended: {datetime.now(UTC).isoformat()}")
     cot_print(f"Total iterations: {iteration}")
     cot_print(f"Full CoT log: {COT_LOG.resolve()}")
 

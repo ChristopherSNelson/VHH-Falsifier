@@ -94,9 +94,7 @@ def calculate_biophysical_profile(sequence: str) -> str:
         )
 
     overall_risk = (
-        "Low"
-        if (pi_flag == "PASS" and gravy_flag == "PASS")
-        else "High-Risk for Aggregation"
+        "Low" if (pi_flag == "PASS" and gravy_flag == "PASS") else "High-Risk for Aggregation"
     )
 
     report = {
@@ -459,15 +457,11 @@ def scan_aggregation_patches(
 
     invalid = set(seq) - set(_KD_SCALE.keys())
     if invalid:
-        return json.dumps(
-            {"error": f"Non-standard residues detected: {sorted(invalid)}."}
-        )
+        return json.dumps({"error": f"Non-standard residues detected: {sorted(invalid)}."})
 
     if len(seq) < window_size:
         return json.dumps(
-            {
-                "error": f"Sequence too short ({len(seq)} aa) for window size {window_size}."
-            }
+            {"error": f"Sequence too short ({len(seq)} aa) for window size {window_size}."}
         )
 
     scores = [_KD_SCALE[aa] for aa in seq]
@@ -555,6 +549,67 @@ def scan_aggregation_patches(
     result = json.dumps(report, indent=2)
     logger.info("scan_aggregation_patches | %s", result)
     return result
+
+
+@mcp.tool()
+def predict_vhh_complex_structure(
+    vhh_sequence: str,
+    antigen_sequence: str | None = None,
+    out_dir: str | None = None,
+    accelerator: str = "gpu",
+    recycling_steps: int = 3,
+    dry_run: bool = False,
+) -> str:
+    """Predict the 3D structure of a VHH or VHH-antigen complex using Boltz-2.
+
+    Boltz-2 is the recommended open-source predictor for antibody-antigen complexes
+    (MIT license). Key confidence metrics:
+      - iptm >= 0.8: high-confidence binding interface
+      - iptm >= 0.6: plausible interface, verify experimentally
+      - iptm <  0.6: low confidence, consider redesign
+
+    GPU required for practical inference (min 8 GB VRAM). Use dry_run=True to
+    validate inputs and generate the input YAML without running inference - useful
+    for queueing jobs on a GPU instance or testing the pipeline locally.
+
+    When antigen_sequence is omitted, defaults to the Human PD-1 ectodomain
+    (Uniprot Q15116, residues 33-150) - the primary screening target.
+
+    Args:
+        vhh_sequence: Single-letter VHH amino acid sequence.
+        antigen_sequence: Optional antigen sequence. Defaults to PD-1 ectodomain.
+        out_dir: Output directory for Boltz-2 predictions. Defaults to a temp dir.
+        accelerator: "gpu" (default), "cpu" (slow), or "tpu".
+        recycling_steps: Boltz-2 recycling iterations (default 3).
+        dry_run: If True, validate and write input YAML but skip inference.
+
+    Returns:
+        JSON string with fields:
+            status: "success" | "dry_run" | "error"
+            vhh_length: int
+            antigen_length: int | None
+            input_yaml: str (path to input file)
+            output_dir: str | None
+            confidence: dict | None (iptm, ptm, complex_plddt, vhh_antigen_iptm)
+            structure_path: str | None (path to best .pdb file)
+            error: str | None
+    """
+    from tools.boltz2_structure import PD1_ECTODOMAIN, predict_structure
+
+    antigen = antigen_sequence if antigen_sequence else PD1_ECTODOMAIN
+
+    result = predict_structure(
+        vhh_sequence=vhh_sequence,
+        antigen_sequence=antigen,
+        out_dir=out_dir,
+        accelerator=accelerator,
+        recycling_steps=recycling_steps,
+        dry_run=dry_run,
+    )
+
+    output = json.dumps(result, indent=2)
+    logger.info("predict_vhh_complex_structure | status=%s", result.get("status"))
+    return output
 
 
 if __name__ == "__main__":
