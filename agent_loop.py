@@ -231,14 +231,6 @@ TOOLS: list[dict] = [
 TOOL_DISPATCH: dict[str, callable] = {t["name"]: t["fn"] for t in TOOL_REGISTRY}
 
 
-def execute_tool(name: str, input_args: dict) -> str:
-    """Execute a tool by name and return its JSON result string."""
-    fn = TOOL_DISPATCH.get(name)
-    if fn is None:
-        return json.dumps({"error": f"Unknown tool: {name}"})
-    return fn(input_args)
-
-
 # ---------------------------------------------------------------------------
 # System prompt
 # ---------------------------------------------------------------------------
@@ -252,47 +244,43 @@ inspired by the Escalante 180-line approach \
 (https://blog.escalante.bio/180-lines-of-code-to-win-the-in-silico-portion-of-the-adaptyv-nipah-binding-competition/).
 
 ## Developability Screening Protocol
-You operate under a strict generate-and-screen framework:
+Each iteration you will:
 
-1. **Generate**: Propose a full VHH sequence (starting with EVQLV...). The CDR3 \
-loop must be designed to mimic the Pembrolizumab heavy-chain CDR3 binding \
-geometry against the PD-1 CC' loop / FG loop epitope.
+1. **Reason**: Analyse the screening results from the previous iteration. \
+For each FAIL, state the exact position, motif, mechanism, and proposed point mutation.
 
-2. **Screen**: IMMEDIATELY call ALL FOUR tools on your proposed sequence:
-   - `vhh_hallmark_audit` — check FR2 hallmark tetrad (positions 37/44/45/47)
-   - `scan_structural_liabilities` — check for deamidation (NG/NS/NA), \
-isomerization (DG), N-glycosylation (N-X-S/T)
-   - `calculate_biophysical_profile` — check pI and GRAVY
-   - `scan_aggregation_patches` — sliding-window hydrophobicity scan for \
-aggregation-prone regions (sticky patches of 5-7 hydrophobic residues)
+2. **Propose**: Write your revised full VHH sequence (starting with EVQLV...). \
+CDR3 must mimic the Pembrolizumab heavy-chain CDR3 binding geometry against \
+the PD-1 CC' loop / FG loop epitope. Every iteration MUST produce a \
+DIFFERENT sequence from the previous one — apply your proposed mutations.
 
-3. **Critique**: Analyze every FAIL flag. For each liability found:
-   - State the exact motif and position
-   - Explain the clinical/manufacturing risk
-   - Propose a specific point mutation to resolve it
-   - Example: "While this mimics the Pembrolizumab binding loop, the NG motif \
-at position X creates a clinical manufacturing risk (asparagine deamidation \
-via succinimide intermediate). I am mutating N→Q (or G→A) to eliminate the \
-NG sequon."
+3. **Format**: ALWAYS output your proposed sequence on its own line, enclosed \
+in a fenced code block labelled `sequence`:
 
-4. **Mutate & Re-test**: Apply the mutations and re-run ALL FOUR tools on the \
-revised sequence. Repeat until all tools return PASS/Low risk.
+```sequence
+EVQLV...
+```
 
-5. **Final Report**: Once the design passes all checks, present the final \
-sequence with a summary of all mutations made and the rationale for each.
+The system will automatically screen your sequence with all four tools and \
+return the results. Do not call any tools yourself.
 
 ## Developability Constraints (hard requirements)
-- pI > 7.5 (avoid precipitation near physiological pH)
-- GRAVY ≤ 0.0 (hydrophilic surface → lower aggregation)
+- pI > 7.5 (avoid precipitation near physiological pH; add Lys/Arg to raise pI)
+- GRAVY ≤ 0.0 (hydrophilic surface → lower aggregation; replace hydrophobic residues)
 - No aggregation-prone patches exceeding the 95th percentile of clinical-stage therapeutics
-- Zero deamidation motifs (NG, NS, NA) in CDRs
-- Zero isomerization motifs (DG) in CDRs
-- Zero N-glycosylation sequons (N-X-S/T, X≠Pro) in CDRs
-- FR2 hallmark tetrad must be assessed and decision documented
+- Zero deamidation motifs (NG, NS, NA): mutate N→Q or following G/S/A→A
+- Zero isomerization motifs (DG): mutate D→E or G→A
+- Zero N-glycosylation sequons (N-X-S/T, X≠Pro): mutate N→Q
+- FR2 hallmark tetrad (positions 37/44/45/47) must be assessed and documented
+
+## Key charge-engineering guidance
+- pI < 7.5 means the sequence has too many acidic residues (D, E). Replace surface D/E \
+in framework regions with K or R. Adding 3-4 Lys/Arg substitutions typically raises pI \
+by 1-2 units.
 
 ## Output format
-Think step by step. Show your reasoning for each design choice. When you \
-identify a liability, be specific about position, motif, mechanism, and fix.
+Think step by step. Show reasoning for each mutation. Then write the full revised \
+sequence in the ```sequence block. Do not truncate — write the complete sequence.
 """
 
 # ---------------------------------------------------------------------------
@@ -558,6 +546,90 @@ def _plot_biophysical_trajectory(
     return out_path
 
 
+def extract_sequence(text: str) -> str | None:
+    """Parse a proposed VHH sequence from agent text.
+
+    Looks for content inside a fenced ```sequence ... ``` block.
+    Falls back to the longest line that contains only standard amino acid
+    characters and is 100-140 residues long.
+    """
+    import re
+
+    # Primary: fenced sequence block
+    m = re.search(r"```sequence\s*\n([ACDEFGHIKLMNPQRSTVWY\n\s]+?)```", text, re.IGNORECASE)
+    if m:
+        return m.group(1).replace("\n", "").replace(" ", "").strip()
+
+    # Fallback: bare line of amino acids in the right length range
+    for line in text.splitlines():
+        line = line.strip()
+        if 100 <= len(line) <= 145 and re.match(r"^[ACDEFGHIKLMNPQRSTVWY]+$", line):
+            return line
+
+    return None
+
+
+def build_screening_message(
+    seq: str,
+    bp: dict,
+    sl: dict,
+    ap: dict,
+    ha: dict,
+    iteration: int,
+) -> str:
+    """Build a rich screening results message to inject into the conversation."""
+    pi = bp.get("isoelectric_point")
+    gravy = bp.get("gravy")
+    liab_count = sl.get("liability_count", 0)
+    liabilities = sl.get("liabilities", [])
+    apr_data = ap.get("candidate_max_patch", {})
+    apr_pct = apr_data.get("percentile")
+    hallmarks = ha.get("hallmark_audit", [])
+
+    pi_ok = pi is not None and pi > 7.5
+    gravy_ok = gravy is not None and gravy <= 0.0
+    liab_ok = liab_count == 0
+    apr_ok = apr_pct is not None and apr_pct < 95.0
+    score = sum([pi_ok, gravy_ok, liab_ok, apr_ok])
+
+    def flag(ok: bool) -> str:
+        return "✓" if ok else "✗"
+
+    lines = [
+        f"[Screener] Iteration {iteration} results ({len(seq)} AA):",
+        f"  pI    = {pi:.2f} {flag(pi_ok)}  ({'PASS' if pi_ok else 'FAIL — must be > 7.5; add Lys/Arg substitutions'})",
+        f"  GRAVY = {gravy:.3f} {flag(gravy_ok)}  ({'PASS' if gravy_ok else 'FAIL — must be ≤ 0.0; replace hydrophobic residues'})",
+        f"  PTM liabilities: {liab_count} {flag(liab_ok)}",
+    ]
+    for liab in liabilities:
+        lines.append(
+            f"    - {liab['liability_type']} motif {liab['motif']} at position "
+            f"{liab['position']}: {liab.get('context', '')} — {liab.get('mechanism', '')}"
+        )
+    apr_label = f"{apr_pct:.0f}th percentile" if apr_pct is not None else "?"
+    lines.append(
+        f"  APR   = {apr_label} {flag(apr_ok)}  ({'PASS' if apr_ok else 'FAIL — must be < 95th percentile; replace hydrophobic CDR3/FR4 residues'})"
+    )
+
+    # FR2 hallmark summary
+    camelid_count = sum(1 for h in hallmarks if h.get("is_camelid_hallmark"))
+    lines.append(f"  FR2 hallmarks: {camelid_count}/4 camelid positions confirmed")
+
+    suffix = (
+        "ALL CONSTRAINTS SATISFIED." if score == 4 else f"{4 - score} constraint(s) remaining."
+    )
+    lines.append(f"\nScore: {score}/4 — {suffix}")
+    if score == 4:
+        lines.append("Write your final summary of all mutations made.")
+    else:
+        lines.append(
+            "Analyse the failures above, apply targeted mutations, and write "
+            "your revised full sequence in a ```sequence block."
+        )
+
+    return "\n".join(lines)
+
+
 def run_screening_loop(
     seed_sequence: str | None = None,
     plot_name: str = "biophysical_trajectory",
@@ -586,8 +658,8 @@ def run_screening_loop(
 
     client = OpenAI(api_key=api_key, base_url=BASE_URL)
 
-    seed_label = "from seed" if seed_sequence else "zero-shot"
-    header_print(f"VHH-Screener — Developability Screening Loop ({seed_label})")
+    _display_label = seed_label if seed_label != "none" else "zero-shot"
+    header_print(f"VHH-Screener — Developability Screening Loop ({_display_label})")
     cot_print(f"Session started: {datetime.now(UTC).isoformat()}")
     cot_print("Target: Human PD-1 (Pembrolizumab epitope)")
     cot_print("Scaffold: Camelid VHH nanobody")
@@ -645,23 +717,20 @@ def run_screening_loop(
     iteration = 0
     final_seq: str | None = None
     hit_limit = False
-    _all_passed = False  # set True when all constraints satisfied; unlocks tool_choice="auto"
+    _all_passed = False
+    _consecutive_no_seq = 0  # guard against repeated parse failures
 
     for iteration in range(1, MAX_ITERATIONS + 1):
         header_print(f"ITERATION {iteration}")
 
-        # Fix 4: truncate message history — keep system prompt + user prompt + last N messages
+        # Truncate message history — keep system + user prompt + last N messages
         if len(messages) > CONTEXT_KEEP_MESSAGES + 2:
             messages = messages[:2] + messages[-CONTEXT_KEEP_MESSAGES:]
             cot_print(f"[Context] Truncated history to {len(messages)} messages.")
 
-        # Fix 1: tool_choice="required" forces tool calls every iteration, preventing
-        # the "agent just talks" failure mode. Switches to "auto" only once all
-        # constraints are satisfied so the agent can deliver its final report.
-        _tool_choice = "auto" if _all_passed else "required"
-
-        # Fix 2: temperature=0 for reproducible benchmark results.
-        # Fix: double max_tokens on length failures (up to 3 doublings).
+        # --- Phase 1: LLM proposes a new sequence (text-only, no tool calling) ---
+        # temperature=0 for reproducible benchmark results.
+        # Double max_tokens on length failures (up to 3 doublings).
         _max_tokens = MAX_TOKENS
         for _attempt in range(4):
             response = client.chat.completions.create(
@@ -669,8 +738,7 @@ def run_screening_loop(
                 max_tokens=_max_tokens,
                 temperature=0,
                 messages=messages,
-                tools=TOOLS,
-                tool_choice=_tool_choice,
+                # No tools= arg: pure text response, forces agent to reason and write a sequence
             )
             if response.choices[0].finish_reason != "length":
                 break
@@ -704,122 +772,92 @@ def run_screening_loop(
 
         cot_print(f"[Iteration {iteration}] Finish reason: {finish_reason}")
 
-        # Print text reasoning in green
-        if message.content:
+        # Print reasoning
+        text = message.content or ""
+        if text:
             cot_print(f"\n[Agent CoT — Iteration {iteration}]")
-            for line in message.content.splitlines():
+            for line in text.splitlines():
                 cot_print(f"  {line}")
 
         # Append assistant message to history
         messages.append(message.model_dump(exclude_none=True))
 
-        # If no tool calls, the agent has reached a conclusion
-        if finish_reason == "stop" or not message.tool_calls:
+        # If agent signals it's done (all passed on prior iteration)
+        if _all_passed:
             header_print("SCREENING LOOP COMPLETE")
-            cot_print("Agent reached final conclusion.")
+            cot_print("Agent delivered final report.")
             break
 
-        # Execute each tool call and feed results back
-        for tool_call in message.tool_calls:
-            fn_name = tool_call.function.name
-            fn_args = json.loads(tool_call.function.arguments)
-
-            cot_print(f"\n[Tool Call] {fn_name}({json.dumps(fn_args, indent=None)[:120]}...)")
-
-            result_str = execute_tool(fn_name, fn_args)
-            result_data = json.loads(result_str)
-
-            cot_print(f"[Tool Result] {fn_name}:")
-            cot_print(f"  {json.dumps(result_data, indent=2)[:500]}")
-
-            # Capture metrics for dashboard plot
-            if "error" not in result_data:
-                if iteration not in iteration_metrics:
-                    iteration_metrics[iteration] = {"iteration": iteration}
-                m = iteration_metrics[iteration]
-
-                if fn_name == "calculate_biophysical_profile":
-                    m["pI"] = result_data["isoelectric_point"]
-                    m["gravy"] = result_data["gravy"]
-                elif fn_name == "scan_structural_liabilities":
-                    m["liability_count"] = result_data["liability_count"]
-                elif fn_name == "scan_aggregation_patches":
-                    m["apr_percentile"] = result_data["candidate_max_patch"]["percentile"]
-
+        # --- Parse proposed sequence from agent text ---
+        new_seq = extract_sequence(text)
+        if not new_seq:
+            _consecutive_no_seq += 1
+            warn_print(
+                f"[Warning] No valid sequence found in agent response "
+                f"(attempt {_consecutive_no_seq})."
+            )
+            if _consecutive_no_seq >= 3:
+                warn_print("[Warning] 3 consecutive parse failures — stopping loop.")
+                break
             messages.append(
                 {
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": result_str,
+                    "role": "user",
+                    "content": (
+                        "No valid VHH sequence was found in your response. "
+                        "You MUST write your full proposed sequence (100-135 AA) "
+                        "in a fenced code block:\n\n"
+                        "```sequence\nEVQLV...\n```\n\n"
+                        "Do not truncate it. Provide the complete sequence now."
+                    ),
                 }
             )
+            continue
+        _consecutive_no_seq = 0
 
-        # --- Auto-profile: guarantee complete metrics every iteration ---
-        # Extract the last sequence the model submitted to any tool
-        last_seq = None
-        for tool_call in reversed(message.tool_calls):
-            args = json.loads(tool_call.function.arguments)
-            if "sequence" in args:
-                last_seq = args["sequence"]
-                break
+        cot_print(f"\n[Sequence] Parsed {len(new_seq)} AA: {new_seq[:40]}...")
+        final_seq = new_seq
 
-        if last_seq:
-            final_seq = last_seq  # track for RunResult
-            if iteration not in iteration_metrics:
-                iteration_metrics[iteration] = {"iteration": iteration}
-            m = iteration_metrics[iteration]
+        # --- Phase 2: Deterministic screening (no LLM, no tool calling) ---
+        cot_print("[Screener] Running all 4 tools...")
+        bp = json.loads(calculate_biophysical_profile(new_seq))
+        sl = json.loads(scan_structural_liabilities(new_seq))
+        ap = json.loads(scan_aggregation_patches(new_seq))
+        ha = json.loads(vhh_hallmark_audit(new_seq))
 
-            # Fill any metrics the model didn't call this iteration
-            if "pI" not in m or "gravy" not in m:
-                bp = json.loads(calculate_biophysical_profile(last_seq))
-                if "error" not in bp:
-                    m.setdefault("pI", bp["isoelectric_point"])
-                    m.setdefault("gravy", bp["gravy"])
+        # Capture metrics for dashboard plot
+        if iteration not in iteration_metrics:
+            iteration_metrics[iteration] = {"iteration": iteration}
+        m = iteration_metrics[iteration]
+        if "error" not in bp:
+            m["pI"] = bp["isoelectric_point"]
+            m["gravy"] = bp["gravy"]
+        if "error" not in sl:
+            m["liability_count"] = sl["liability_count"]
+        if "error" not in ap:
+            m["apr_percentile"] = ap["candidate_max_patch"]["percentile"]
 
-            if "liability_count" not in m:
-                sl = json.loads(scan_structural_liabilities(last_seq))
-                if "error" not in sl:
-                    m["liability_count"] = sl["liability_count"]
+        # Build rich results message and inject into conversation
+        screening_msg = build_screening_message(new_seq, bp, sl, ap, ha, iteration)
+        cot_print(screening_msg)
+        messages.append({"role": "user", "content": screening_msg})
 
-            if "apr_percentile" not in m:
-                ap = json.loads(scan_aggregation_patches(last_seq))
-                if "error" not in ap:
-                    m["apr_percentile"] = ap["candidate_max_patch"]["percentile"]
-
-            # Fix 3: inject partial scoring status so agent has explicit gradient.
-            pi = m.get("pI")
-            gravy = m.get("gravy")
-            liab = m.get("liability_count")
-            apr = m.get("apr_percentile")
-
-            pi_ok = pi is not None and pi > 7.5
-            gravy_ok = gravy is not None and gravy <= 0.0
-            liab_ok = liab is not None and liab == 0
-            apr_ok = apr is not None and apr < 95.0
-
-            score = sum([pi_ok, gravy_ok, liab_ok, apr_ok])
-            _all_passed = score == 4
-
-            def _flag(ok: bool) -> str:
-                return "✓" if ok else "✗"
-
-            status_parts = [
-                f"pI={pi:.2f}{_flag(pi_ok)}" if pi is not None else "pI=?",
-                f"GRAVY={gravy:.3f}{_flag(gravy_ok)}" if gravy is not None else "GRAVY=?",
-                f"liabilities={liab}{_flag(liab_ok)}" if liab is not None else "liab=?",
-                f"APR={apr:.0f}th%ile{_flag(apr_ok)}" if apr is not None else "APR=?",
-            ]
-            status_line = (
-                f"[Screener] Iter {iteration}: {score}/4 passing — "
-                + "  |  ".join(status_parts)
-                + (
-                    " — ALL CONSTRAINTS SATISFIED. Provide your final sequence and report."
-                    if _all_passed
-                    else f" — {4 - score} constraint(s) remaining."
-                )
-            )
-            cot_print(status_line)
-            messages.append({"role": "user", "content": status_line})
+        # Check objective pass
+        pi = bp.get("isoelectric_point")
+        gravy = bp.get("gravy")
+        liab = sl.get("liability_count")
+        apr_pct = ap.get("candidate_max_patch", {}).get("percentile")
+        _all_passed = (
+            pi is not None
+            and pi > 7.5
+            and gravy is not None
+            and gravy <= 0.0
+            and liab == 0
+            and apr_pct is not None
+            and apr_pct < 95.0
+        )
+        if _all_passed:
+            cot_print("[Screener] ALL CONSTRAINTS SATISFIED — running final report iteration.")
+            # Loop continues one more time so agent can write its final summary
 
     else:
         hit_limit = True
@@ -895,14 +933,11 @@ def run_screening_loop(
         if "error" not in ap:
             final_apr_percentile = ap.get("candidate_max_patch", {}).get("percentile")
 
-        apr_passed = (
-            ap.get("screening_result", {}).get("passed", False) if "error" not in ap else False
-        )
         passed = (
             (final_pi is not None and final_pi > 7.5)
             and (final_gravy is not None and final_gravy <= 0.0)
             and (final_liability_count == 0)
-            and apr_passed
+            and (final_apr_percentile is not None and final_apr_percentile < 95.0)
         )
 
     result_label = "PASS" if passed else "FAIL"
