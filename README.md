@@ -1,7 +1,5 @@
 # VHH-Screener: Agentic Developability Screening for Nanobody Engineering
 
-![VHH-Screener Developability Screening Loop](assets/infographic.png)
-
 ## What This Does
 
 An LLM agent designs VHH nanobody sequences and immediately evaluates them against a panel of deterministic developability checks. If any check fails, the agent proposes targeted point mutations and re-evaluates. The loop runs until the candidate satisfies all constraints or the iteration budget is exhausted.
