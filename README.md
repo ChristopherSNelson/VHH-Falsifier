@@ -174,9 +174,6 @@ python -m pytest tests/ -q
 
 83 tests covering five screening tools and the Boltz-2 structure predictor. Regression anchors use Caplacizumab (PDB 7EOW, first approved VHH) and Pembrolizumab VH (PDB 5DK3, chain B) with verified expected values. Boltz-2 tests use `dry_run=True` - no GPU required. SASA filter tests download PDB 7EOW from RCSB at runtime and are skipped automatically if the network is unavailable.
 
-## Technical Heritage
-
-Zero-shot binding strategy adapted from the [Escalante 180-line approach](https://blog.escalante.bio/180-lines-of-code-to-win-the-in-silico-portion-of-the-adaptyv-nipah-binding-competition/), which won the in-silico portion of the Adaptyv Nipah binding competition. That work demonstrated that structured zero-shot prompting with a clear binding epitope can produce credible VHH designs without fine-tuning or MSA inputs. VHH-Screener extends that baseline with a deterministic developability filter applied at every iteration, ensuring designs are optimized for manufacturability alongside binding plausibility.
 
 ## Roadmap
 
